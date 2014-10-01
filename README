@@ -1,4 +1,4 @@
-# envrun
+# hsup
 
 Queries the Heroku API, downloads environment variables, and then runs
 a process with the passed `argv`.

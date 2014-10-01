@@ -48,12 +48,12 @@ func main() {
 	var err error
 
 	if nrc, err = hkclient.LoadNetRc(); err != nil {
-		log.Fatal("envrun could not load netrc: " + err.Error())
+		log.Fatal("hsup could not load netrc: " + err.Error())
 	}
 
-	cl, err := hkclient.New(nrc, "envrun")
+	cl, err := hkclient.New(nrc, "hsup")
 	if err != nil {
-		log.Fatal("envrun could not create client: " + err.Error())
+		log.Fatal("hsup could not create client: " + err.Error())
 	}
 
 	app := os.Args[1]
@@ -61,7 +61,7 @@ func main() {
 
 	config, err := cl.Client.ConfigVarInfo(app)
 	if err != nil {
-		log.Fatal("envrun could not get config info: " + err.Error())
+		log.Fatal("hsup could not get config info: " + err.Error())
 	}
 
 	cmd := exec.Command(subArgs[0], subArgs[1:]...)
