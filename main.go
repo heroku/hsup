@@ -7,14 +7,15 @@ import (
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 // Propagate signals to child.
 func signaler(p *os.Process) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	group, err := os.FindProcess(-1 * p.Pid)
 
+	group, err := os.FindProcess(-1 * p.Pid)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -25,15 +26,32 @@ func signaler(p *os.Process) {
 	}
 }
 
+func restarter(p *os.Process) {
+	group, err := os.FindProcess(-1 * p.Pid)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Begin graceful shutdown via SIGTERM.
+	group.Signal(syscall.SIGTERM)
+
+	t := time.NewTicker(10 * time.Second)
+	<-t.C
+	t.Stop()
+
+	// No more time.
+	group.Signal(syscall.SIGKILL)
+}
+
 func main() {
-	var nrc *hkclient.HkNetRc
+	var nrc *hkclient.NetRc
 	var err error
 
-	if nrc, err = hkclient.LoadNetrc(); err != nil {
+	if nrc, err = hkclient.LoadNetRc(); err != nil {
 		log.Fatal("envrun could not load netrc: " + err.Error())
 	}
 
-	cl, err := hkclient.HkClients(nrc, "envrun")
+	cl, err := hkclient.New(nrc, "envrun")
 	if err != nil {
 		log.Fatal("envrun could not create client: " + err.Error())
 	}
