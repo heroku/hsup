@@ -11,6 +11,26 @@ import (
 	"time"
 )
 
+func createCommand(config map[string]string, executable string, args []string) *exec.Cmd {
+	cmd := exec.Command(executable, args...)
+
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Fill environment vector from Heroku configuration.
+	for k, v := range config {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+
+	// Let $PATH leak into the environment started: otherwise simple programs
+	// won't be available, much less complicated $PATH mangling programs like
+	// "bundle" or "rbenv".
+	cmd.Env = append(cmd.Env, "PATH="+os.Getenv("PATH"))
+
+	return cmd
+}
+
 // Propagate signals to child.
 func signaler(p *os.Process) {
 	signals := make(chan os.Signal, 1)
@@ -82,22 +102,7 @@ func main() {
 	}
 
 	replaceEnvVarArgs(config, args)
-
-	cmd := exec.Command(executable, args...)
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Fill environment vector from Heroku configuration.
-	for k, v := range config {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-
-	// Let $PATH leak into the environment started: otherwise
-	// simple programs won't be available, much less complicated
-	// $PATH mangling programs like "bundle" or "rbenv".
-	cmd.Env = append(cmd.Env, "PATH="+os.Getenv("PATH"))
+	cmd := createCommand(config, executable, args)
 
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
