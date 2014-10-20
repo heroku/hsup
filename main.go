@@ -112,9 +112,7 @@ func restarter(p *os.Process, restartChan chan bool) {
 			// Begin graceful shutdown via SIGTERM.
 			group.Signal(syscall.SIGTERM)
 
-			t := time.NewTicker(10 * time.Second)
-			<-t.C
-			t.Stop()
+			<-time.After(10 * time.Second)
 
 			// No more time.
 			group.Signal(syscall.SIGKILL)
