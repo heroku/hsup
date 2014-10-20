@@ -145,7 +145,7 @@ func main() {
 	replaceEnvVarArgs(config, args)
 	cmd := createCommand(config, executable, args)
 
-	log.Printf("Starting command: %v %v\n", cmd.Path, cmd.Args)
+	log.Printf("Starting command: %v\n", cmd.Args)
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
