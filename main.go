@@ -1,11 +1,12 @@
 package main
 
 import (
-	"github.com/heroku/hk/hkclient"
+	"github.com/cyberdelia/heroku-go/v3"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -23,6 +24,21 @@ func signaler(p *os.Process) {
 	for {
 		sig := <-signals
 		group.Signal(sig)
+	}
+}
+
+// This is a pretty flawed system that will replace any args that are obviously
+// env vars. It's designed mostly to handle something like:
+//
+//     bin/web --port $PORT
+//
+// Env vars that are contained within double-quoted strings and the like will
+// need a little more work.
+func replaceEnvVarArgs(config map[string]string, args []string) {
+	for i, arg := range args {
+		if strings.HasPrefix(arg, "$") {
+			args[i] = config[arg[1:]]
+		}
 	}
 }
 
@@ -44,27 +60,30 @@ func restarter(p *os.Process) {
 }
 
 func main() {
-	var nrc *hkclient.NetRc
 	var err error
 
-	if nrc, err = hkclient.LoadNetRc(); err != nil {
-		log.Fatal("hsup could not load netrc: " + err.Error())
+	token := os.Getenv("HEROKU_ACCESS_TOKEN")
+	if token == "" {
+		log.Fatal("need HEROKU_ACCESS_TOKEN")
 	}
 
-	cl, err := hkclient.New(nrc, "hsup")
-	if err != nil {
-		log.Fatal("hsup could not create client: " + err.Error())
-	}
+	heroku.DefaultTransport.Username = ""
+	heroku.DefaultTransport.Password = token
+
+	cl := heroku.NewService(heroku.DefaultClient)
 
 	app := os.Args[1]
-	subArgs := os.Args[2:]
+	executable := os.Args[2]
+	args := os.Args[2:]
 
-	config, err := cl.Client.ConfigVarInfo(app)
+	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
 	}
 
-	cmd := exec.Command(subArgs[0], subArgs[1:]...)
+	replaceEnvVarArgs(config, args)
+
+	cmd := exec.Command(executable, args...)
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
