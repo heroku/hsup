@@ -31,8 +31,8 @@ func createCommand(config map[string]string, executable string, args []string) *
 	return cmd
 }
 
-// Propagate signals to child.
-func signaler(p *os.Process) {
+// Propagates deadly Unix signals to the containerized child process group.
+func signalListener(p *os.Process) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
@@ -62,21 +62,64 @@ func replaceEnvVarArgs(config map[string]string, args []string) {
 	}
 }
 
-func restarter(p *os.Process) {
-	group, err := os.FindProcess(-1 * p.Pid)
-	if err != nil {
-		log.Fatal(err)
+// Listens for new releases by periodically polling the Heroku API. When a new
+// release is detected, `true` is sent to `restartChan`.
+func releaseListener(client *heroku.Service, app string, restartChan chan bool) {
+	lastRelease := ""
+	for {
+		releases, err := client.ReleaseList(app, &heroku.ListRange{Descending: true, Field: "id", Max: 1})
+		if err != nil {
+			log.Printf("Error getting releases: %s\n", err.Error())
+
+			// set an empty array so that we can fall through to the sleep
+			releases = []*heroku.Release{}
+		}
+
+		restartRequired := false
+		if len(releases) > 0 && lastRelease != releases[0].ID {
+			if lastRelease != "" {
+				restartRequired = true
+			}
+
+			lastRelease = releases[0].ID
+		}
+
+		if restartRequired {
+			log.Printf("New release %s detected; restarting app\n", lastRelease)
+			// this is a blocking channel and so restarts will be throttled
+			// naturally
+			restartChan <- true
+		} else {
+			log.Printf("No new releases\n")
+			<-time.After(10 * time.Second)
+		}
 	}
+}
 
-	// Begin graceful shutdown via SIGTERM.
-	group.Signal(syscall.SIGTERM)
+func restarter(p *os.Process, restartChan chan bool) {
+	for {
+		select {
+		case restartRequired := <-restartChan:
+			if !restartRequired {
+				continue
+			}
 
-	t := time.NewTicker(10 * time.Second)
-	<-t.C
-	t.Stop()
+			group, err := os.FindProcess(-1 * p.Pid)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-	// No more time.
-	group.Signal(syscall.SIGKILL)
+			// Begin graceful shutdown via SIGTERM.
+			group.Signal(syscall.SIGTERM)
+
+			t := time.NewTicker(10 * time.Second)
+			<-t.C
+			t.Stop()
+
+			// No more time.
+			group.Signal(syscall.SIGKILL)
+		}
+	}
 }
 
 func main() {
@@ -94,7 +137,7 @@ func main() {
 
 	app := os.Args[1]
 	executable := os.Args[2]
-	args := os.Args[2:]
+	args := os.Args[3:]
 
 	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
@@ -104,11 +147,16 @@ func main() {
 	replaceEnvVarArgs(config, args)
 	cmd := createCommand(config, executable, args)
 
+	log.Printf("Starting command: %v %v\n", cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
 
-	go signaler(cmd.Process)
+	restartChan := make(chan bool)
+
+	go releaseListener(cl, app, restartChan)
+	go signalListener(cmd.Process)
+	go restarter(cmd.Process, restartChan)
 
 	if err := cmd.Wait(); err != nil {
 		// Non-portable: only works on Unix work-alikes.
