@@ -5,8 +5,9 @@ a process with arguments.
 
 Usage:
 
-    hsup [app] [executable] [args ...]
+    HEROKU_ACCESS_TOKEN=... hsup [app] [executable] [args ...]
 
 Example:
 
+    export HEROKU_ACCESS_TOKEN=...
     hsup www bin/web -p $PORT
