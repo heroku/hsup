@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"github.com/cyberdelia/heroku-go/v3"
 	"log"
 	"os"
@@ -139,17 +140,26 @@ func main() {
 
 	cl := heroku.NewService(heroku.DefaultClient)
 
-	app := os.Args[1]
-	executable := os.Args[2]
-	args := os.Args[3:]
+	flag.Parse()
+	args := flag.Args()
+	switch len(args) {
+	case 0:
+		log.Fatal("hsup requires an app name")
+	case 1:
+		log.Fatal("hsup requires an argument program")
+	}
+
+	app := args[0]
+	executable := args[1]
+	rest := args[2:]
 
 	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
 	}
 
-	replaceEnvVarArgs(config, args)
-	cmd := createCommand(config, executable, args)
+	replaceEnvVarArgs(config, rest)
+	cmd := createCommand(config, executable, rest)
 
 	log.Printf("Starting command: %v\n", cmd.Args)
 	if err := cmd.Start(); err != nil {
