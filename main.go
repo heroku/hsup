@@ -25,11 +25,6 @@ func createCommand(config map[string]string, executable string,
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
-	// Let $PATH leak into the environment started: otherwise
-	// simple programs won't be available, much less complicated
-	// $PATH mangling programs like "bundle" or "rbenv".
-	cmd.Env = append(cmd.Env, "PATH="+os.Getenv("PATH"))
-
 	return cmd
 }
 
@@ -150,7 +145,15 @@ func main() {
 	}
 
 	app := args[0]
-	executable := args[1]
+
+	// Resolve $PATH before gathering the environment set in
+	// Heroku.  This is so one can resolve a local program,
+	// e.g. "docker run", before $PATH is overwritten.
+	executable, err := exec.LookPath(args[1])
+	if err != nil {
+		log.Fatalln("hsup could not compute absolute path of " +
+			"executable:", args[1])
+	}
 	rest := args[2:]
 
 	config, err := cl.ConfigVarInfo(app)
