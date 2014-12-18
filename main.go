@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-func createCommand(config map[string]string, executable string, args []string) *exec.Cmd {
+func createCommand(config map[string]string, executable string,
+	args []string) *exec.Cmd {
 	cmd := exec.Command(executable, args...)
 
 	cmd.Stdin = os.Stdin
@@ -23,9 +24,9 @@ func createCommand(config map[string]string, executable string, args []string) *
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
-	// Let $PATH leak into the environment started: otherwise simple programs
-	// won't be available, much less complicated $PATH mangling programs like
-	// "bundle" or "rbenv".
+	// Let $PATH leak into the environment started: otherwise
+	// simple programs won't be available, much less complicated
+	// $PATH mangling programs like "bundle" or "rbenv".
 	cmd.Env = append(cmd.Env, "PATH="+os.Getenv("PATH"))
 
 	return cmd
@@ -64,14 +65,18 @@ func replaceEnvVarArgs(config map[string]string, args []string) {
 
 // Listens for new releases by periodically polling the Heroku API. When a new
 // release is detected, `true` is sent to `restartChan`.
-func releaseListener(client *heroku.Service, app string, restartChan chan bool) {
+func releaseListener(client *heroku.Service, app string,
+	restartChan chan bool) {
 	lastRelease := ""
 	for {
-		releases, err := client.ReleaseList(app, &heroku.ListRange{Descending: true, Field: "id", Max: 1})
+		releases, err := client.ReleaseList(
+			app, &heroku.ListRange{Descending: true, Field: "id",
+				Max: 1})
 		if err != nil {
 			log.Printf("Error getting releases: %s\n", err.Error())
 
-			// set an empty array so that we can fall through to the sleep
+			// Set an empty array so that we can fall
+			// through to the sleep.
 			releases = []*heroku.Release{}
 		}
 
@@ -85,9 +90,10 @@ func releaseListener(client *heroku.Service, app string, restartChan chan bool) 
 		}
 
 		if restartRequired {
-			log.Printf("New release %s detected; restarting app\n", lastRelease)
-			// this is a blocking channel and so restarts will be throttled
-			// naturally
+			log.Printf("New release %s detected; restarting app\n",
+				lastRelease)
+			// This is a blocking channel and so restarts
+			// will be throttled naturally.
 			restartChan <- true
 		} else {
 			log.Printf("No new releases\n")
