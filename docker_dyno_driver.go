@@ -9,7 +9,7 @@ import (
 )
 
 type DockerDynoDriver struct {
-	d *Docker
+	d     *Docker
 	state DynoState
 
 	cmd     *exec.Cmd

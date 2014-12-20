@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-
 type SimpleDynoDriver struct {
 	cmd     *exec.Cmd
 	waiting chan error

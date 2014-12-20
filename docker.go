@@ -1,12 +1,12 @@
 package main
 
 import (
-	"github.com/fsouza/go-dockerclient"
 	"fmt"
+	"github.com/fsouza/go-dockerclient"
 )
 
 type StackImage struct {
-	stack string
+	stack   string
 	repoTag string
 	present bool
 }
@@ -23,7 +23,7 @@ func (d *Docker) Connect() (err error) {
 
 func (d *Docker) StackStat(stack string) (*StackImage, error) {
 	si := StackImage{}
-	switch (stack) {
+	switch stack {
 	case "cedar-14":
 		si.repoTag = "heroku/cedar:14"
 	default:
