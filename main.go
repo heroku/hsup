@@ -5,43 +5,10 @@ import (
 	"github.com/cyberdelia/heroku-go/v3"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
 )
-
-func createCommand(config map[string]string, executable string,
-	args []string) *exec.Cmd {
-	cmd := exec.Command(executable, args...)
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Fill environment vector from Heroku configuration.
-	for k, v := range config {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-
-	return cmd
-}
-
-// Propagates deadly Unix signals to the containerized child process group.
-func signalListener(p *os.Process) {
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-
-	group, err := os.FindProcess(-1 * p.Pid)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		sig := <-signals
-		group.Signal(sig)
-	}
-}
 
 // Listens for new releases by periodically polling the Heroku
 // API. When a new release is detected it is sent to the returned
