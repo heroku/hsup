@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -44,81 +43,86 @@ func signalListener(p *os.Process) {
 	}
 }
 
-// This is a pretty flawed system that will replace any args that are obviously
-// env vars. It's designed mostly to handle something like:
-//
-//     bin/web --port $PORT
-//
-// Env vars that are contained within double-quoted strings and the like will
-// need a little more work.
-func replaceEnvVarArgs(config map[string]string, args []string) {
-	for i, arg := range args {
-		if strings.HasPrefix(arg, "$") {
-			args[i] = config[arg[1:]]
-		}
-	}
-}
-
-// Listens for new releases by periodically polling the Heroku API. When a new
-// release is detected, `true` is sent to `restartChan`.
-func releaseListener(client *heroku.Service, app string,
-	restartChan chan bool) {
+// Listens for new releases by periodically polling the Heroku
+// API. When a new release is detected it is sent to the returned
+// channel.
+func startReleasePoll(client *heroku.Service, app string) (
+	out <-chan *heroku.Release) {
 	lastRelease := ""
-	for {
-		releases, err := client.ReleaseList(
-			app, &heroku.ListRange{Descending: true, Field: "id",
-				Max: 1})
-		if err != nil {
-			log.Printf("Error getting releases: %s\n", err.Error())
+	relc := make(chan *heroku.Release)
+	go func() {
+		for {
+			releases, err := client.ReleaseList(
+				app, &heroku.ListRange{Descending: true,
+					Field: "version", Max: 1})
+			if err != nil {
+				log.Printf("Error getting releases: %s\n",
+					err.Error())
 
-			// Set an empty array so that we can fall
-			// through to the sleep.
-			releases = []*heroku.Release{}
-		}
-
-		restartRequired := false
-		if len(releases) > 0 && lastRelease != releases[0].ID {
-			if lastRelease != "" {
-				restartRequired = true
+				// Set an empty array so that we can fall
+				// through to the sleep.
+				releases = []*heroku.Release{}
 			}
 
-			lastRelease = releases[0].ID
-		}
+			restartRequired := false
+			if len(releases) > 0 && lastRelease != releases[0].ID {
+				restartRequired = true
+				lastRelease = releases[0].ID
+			}
 
-		if restartRequired {
-			log.Printf("New release %s detected; restarting app\n",
-				lastRelease)
-			// This is a blocking channel and so restarts
-			// will be throttled naturally.
-			restartChan <- true
-		} else {
-			log.Printf("No new releases\n")
-			<-time.After(10 * time.Second)
+			if restartRequired {
+				log.Printf("New release %s detected",
+					lastRelease)
+				// This is a blocking channel and so restarts
+				// will be throttled naturally.
+				relc <- releases[0]
+			} else {
+				log.Printf("No new releases\n")
+				<-time.After(10 * time.Second)
+			}
 		}
-	}
+	}()
+
+	return relc
 }
 
-func restarter(p *os.Process, restartChan chan bool) {
-	for {
-		select {
-		case restartRequired := <-restartChan:
-			if !restartRequired {
-				continue
-			}
+func restart(app string, dd DynoDriver,
+	release *heroku.Release, args []string, cl *heroku.Service) {
+	config, err := cl.ConfigVarInfo(app)
+	if err != nil {
+		log.Fatal("hsup could not get config info: " + err.Error())
+	}
 
-			group, err := os.FindProcess(-1 * p.Pid)
-			if err != nil {
-				log.Fatal(err)
-			}
+	b := &Bundle{
+		config:  config,
+		release: release,
+		argv:    args[1:],
+	}
 
-			// Begin graceful shutdown via SIGTERM.
-			group.Signal(syscall.SIGTERM)
-
-			<-time.After(10 * time.Second)
-
-			// No more time.
-			group.Signal(syscall.SIGKILL)
+again:
+	s := dd.State()
+	switch s {
+	case NeverStarted:
+		fallthrough
+	case Stopped:
+		log.Println("starting")
+		err = dd.Start(b)
+		if err != nil {
+			log.Println(
+				"process could not start with error:",
+				err)
 		}
+		log.Println("started")
+	case Started:
+		log.Println("Attempting to stop...")
+		err = dd.Stop()
+		if err != nil {
+			log.Println("process stopped with error:", err)
+		}
+		log.Println("...stopped")
+		goto again
+	default:
+		log.Fatalln("BUG bad state:", s)
 	}
 }
 
@@ -134,7 +138,8 @@ func main() {
 	heroku.DefaultTransport.Password = token
 
 	cl := heroku.NewService(heroku.DefaultClient)
-
+	dynoDriver := flag.String("dynodriver", "simple",
+		"specify a dynoDriver driver (program that starts a program)")
 	flag.Parse()
 	args := flag.Args()
 	switch len(args) {
@@ -144,41 +149,29 @@ func main() {
 		log.Fatal("hsup requires an argument program")
 	}
 
+	dd, err := FindDynoDriver(*dynoDriver)
+	if err != nil {
+		log.Fatalln("could not find dyno driver:", *dynoDriver)
+	}
+
 	app := args[0]
 
-	// Resolve $PATH before gathering the environment set in
-	// Heroku.  This is so one can resolve a local program,
-	// e.g. "docker run", before $PATH is overwritten.
-	executable, err := exec.LookPath(args[1])
-	if err != nil {
-		log.Fatalln("hsup could not compute absolute path of " +
-			"executable:", args[1])
-	}
-	rest := args[2:]
+	out := startReleasePoll(cl, app)
+	signals := make(chan os.Signal)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
-	config, err := cl.ConfigVarInfo(app)
-	if err != nil {
-		log.Fatal("hsup could not get config info: " + err.Error())
-	}
-
-	replaceEnvVarArgs(config, rest)
-	cmd := createCommand(config, executable, rest)
-
-	log.Printf("Starting command: %v\n", cmd.Args)
-	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
-	}
-
-	restartChan := make(chan bool)
-
-	go releaseListener(cl, app, restartChan)
-	go signalListener(cmd.Process)
-	go restarter(cmd.Process, restartChan)
-
-	if err := cmd.Wait(); err != nil {
-		// Non-portable: only works on Unix work-alikes.
-		ee := err.(*exec.ExitError)
-		os.Exit(ee.Sys().(syscall.WaitStatus).ExitStatus())
+	for {
+		select {
+		case release := <-out:
+			restart(app, dd, release, args, cl)
+		case sig := <-signals:
+			log.Println("hsup exits on account of signal:", sig)
+			err = dd.Stop()
+			if err != nil {
+				log.Println("process stopped with error:", err)
+			}
+			os.Exit(1)
+		}
 	}
 
 	os.Exit(0)
