@@ -22,9 +22,6 @@ const (
 func FindDynoDriver(name string) (DynoDriver, error) {
 	switch name {
 	case "simple":
-		// Simple Driver: downloads environment, minus $PATH
-		// so that local programs work as expected, and runs
-		// the argv.
 		return NewSimpleDynoDriver(), nil
 	case "docker":
 		return NewDockerDynoDriver(), nil
