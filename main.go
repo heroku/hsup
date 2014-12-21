@@ -84,12 +84,12 @@ func start(app string, dd DynoDriver,
 	}
 
 	b := &Bundle{
-		app:        app,
-		argv:       args[1:],
-		config:     config,
-		formation:  formation,
-		release:    release,
-		slug:       slug,
+		app:       app,
+		argv:      args[1:],
+		config:    config,
+		formation: formation,
+		release:   release,
+		slug:      slug,
 	}
 
 again:
