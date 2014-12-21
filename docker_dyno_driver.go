@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
-	"syscall"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -69,7 +67,7 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 
 	err = dd.d.c.StartContainer(dd.container.ID, &docker.HostConfig{})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	dd.state = Started
@@ -78,33 +76,7 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 }
 
 func (dd *DockerDynoDriver) Stop() error {
-	// If we could never start the process, don't worry about stopping it. May
-	// occur in cases like if Docker was down.
-	if dd.cmd == nil {
-		return nil
-	}
-
-	p := dd.cmd.Process
-
-	group, err := os.FindProcess(-1 * p.Pid)
-	if err != nil {
-		return err
-	}
-
-	// Begin graceful shutdown via SIGTERM.
-	group.Signal(syscall.SIGTERM)
-
-	for {
-		select {
-		case <-time.After(10 * time.Second):
-			log.Println("sigkill", group)
-			group.Signal(syscall.SIGKILL)
-		case err := <-dd.waiting:
-			log.Println("waited", group)
-			dd.state = Stopped
-			return err
-		}
-		log.Println("spin", group)
-		time.Sleep(1)
-	}
+	err := dd.d.c.StopContainer(dd.container.ID, 10)
+	dd.state = Stopped
+	return err
 }
