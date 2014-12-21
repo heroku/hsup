@@ -4,10 +4,11 @@ import (
 	"archive/tar"
 	"bytes"
 	"fmt"
-	"github.com/fsouza/go-dockerclient"
 	"log"
 	"os"
 	"time"
+
+	"github.com/fsouza/go-dockerclient"
 )
 
 type StackImage struct {
@@ -62,8 +63,8 @@ func (d *Docker) BuildSlugImage(si *StackImage, slugUrl string) error {
 	tr := tar.NewWriter(inputBuf)
 	dockerContents := fmt.Sprintf(`FROM %s
 RUN rm -rf /app
-RUN curl --verbose '%s' -o /tmp/slug.img 1>&2
-RUN (unsquashfs -d /app /tmp/slug.img || (cd / && mkdir /app && tar -xzf /tmp/slug.img)) && rm -f /app/log /app/tmp && mkdir /app/log /app/tmp &&  chown -R daemon:daemon /app && chmod -R gor /app && find /app -type d | xargs chmod gox
+RUN curl '%s' -o /slug.img
+RUN (unsquashfs -d /app /slug.img || (cd / && mkdir /app && tar -xzf /slug.img)) && rm -f /app/log /app/tmp && mkdir /app/log /app/tmp &&  chown -R daemon:daemon /app && chmod -R go+r /app && find /app -type d | xargs chmod go+x
 WORKDIR /app
 `, si.img.ID, slugUrl)
 

@@ -43,6 +43,7 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Built image successfully")
 
 	dd.state = Started
 	dd.cmd = exec.Command(b.argv[0], b.argv[1:]...)
