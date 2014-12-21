@@ -6,9 +6,10 @@ import (
 )
 
 type Bundle struct {
+	argv    []string
 	config  map[string]string
 	release *heroku.Release
-	argv    []string
+	slug    *heroku.Slug
 }
 
 type DynoState int

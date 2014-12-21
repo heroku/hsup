@@ -10,39 +10,48 @@ import (
 	"time"
 )
 
+func fetchLatestRelease(client *heroku.Service, app string) (*heroku.Release, error) {
+	releases, err := client.ReleaseList(
+		app, &heroku.ListRange{Descending: true, Field: "version", Max: 1})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(releases) < 1 {
+		return nil, nil
+	}
+
+	return releases[0], nil
+}
+
 // Listens for new releases by periodically polling the Heroku
 // API. When a new release is detected it is sent to the returned
 // channel.
 func startReleasePoll(client *heroku.Service, app string) (
 	out <-chan *heroku.Release) {
-	lastRelease := ""
-	relc := make(chan *heroku.Release)
+	lastReleaseID := ""
+	releaseChannel := make(chan *heroku.Release)
 	go func() {
 		for {
-			releases, err := client.ReleaseList(
-				app, &heroku.ListRange{Descending: true,
-					Field: "version", Max: 1})
+			release, err := fetchLatestRelease(client, app)
 			if err != nil {
 				log.Printf("Error getting releases: %s\n",
 					err.Error())
-
-				// Set an empty array so that we can fall
-				// through to the sleep.
-				releases = []*heroku.Release{}
+				// with `release` remaining as `nil`, allow the function to
+				// fall through to its sleep
 			}
 
 			restartRequired := false
-			if len(releases) > 0 && lastRelease != releases[0].ID {
+			if release != nil && lastReleaseID != release.ID {
 				restartRequired = true
-				lastRelease = releases[0].ID
+				lastReleaseID = release.ID
 			}
 
 			if restartRequired {
-				log.Printf("New release %s detected",
-					lastRelease)
+				log.Printf("New release %s detected", lastReleaseID)
 				// This is a blocking channel and so restarts
 				// will be throttled naturally.
-				relc <- releases[0]
+				releaseChannel <- release
 			} else {
 				log.Printf("No new releases\n")
 				<-time.After(10 * time.Second)
@@ -50,20 +59,26 @@ func startReleasePoll(client *heroku.Service, app string) (
 		}
 	}()
 
-	return relc
+	return releaseChannel
 }
 
-func restart(app string, dd DynoDriver,
+func start(app string, dd DynoDriver,
 	release *heroku.Release, args []string, cl *heroku.Service) {
 	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
 	}
 
+	slug, err := cl.SlugInfo(app, release.Slug.ID)
+	if err != nil {
+		log.Fatal("hsup could not get slug info: " + err.Error())
+	}
+
 	b := &Bundle{
+		argv:    args[1:],
 		config:  config,
 		release: release,
-		argv:    args[1:],
+		slug:    slug,
 	}
 
 again:
@@ -105,7 +120,7 @@ func main() {
 	heroku.DefaultTransport.Password = token
 
 	cl := heroku.NewService(heroku.DefaultClient)
-	dynoDriver := flag.String("dynodriver", "simple",
+	dynoDriverName := flag.String("dynodriver", "simple",
 		"specify a dynoDriver driver (program that starts a program)")
 	flag.Parse()
 	args := flag.Args()
@@ -116,9 +131,9 @@ func main() {
 		log.Fatal("hsup requires an argument program")
 	}
 
-	dd, err := FindDynoDriver(*dynoDriver)
+	dynoDriver, err := FindDynoDriver(*dynoDriverName)
 	if err != nil {
-		log.Fatalln("could not find dyno driver:", *dynoDriver)
+		log.Fatalln("could not find dyno driver:", *dynoDriverName)
 	}
 
 	app := args[0]
@@ -130,10 +145,10 @@ func main() {
 	for {
 		select {
 		case release := <-out:
-			restart(app, dd, release, args, cl)
+			start(app, dynoDriver, release, args, cl)
 		case sig := <-signals:
-			log.Println("hsup exits on account of signal:", sig)
-			err = dd.Stop()
+			log.Println("hsup caught a deadly signal:", sig)
+			err = dynoDriver.Stop()
 			if err != nil {
 				log.Println("process stopped with error:", err)
 			}

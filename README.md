@@ -9,5 +9,6 @@ Usage:
 
 Example:
 
+    export DOCKER_HOST=unix:///var/run/docker.sock
     export HEROKU_ACCESS_TOKEN=...
     hsup www bin/web -p $PORT
