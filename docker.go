@@ -57,7 +57,8 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 	return &si, nil
 }
 
-func (d *Docker) BuildSlugImage(si *StackImage, slugUrl string) error {
+func (d *Docker) BuildSlugImage(si *StackImage, bundle *Bundle) (string, error) {
+	slugUrl := bundle.slug.Blob.URL
 	t := time.Now()
 	inputBuf, outputBuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 	tr := tar.NewWriter(inputBuf)
@@ -77,16 +78,18 @@ WORKDIR /app
 	tr.Write([]byte(dockerContents))
 	tr.Close()
 
+	imageName := fmt.Sprintf("%v-%v", bundle.app, bundle.release.Version)
+
 	opts := docker.BuildImageOptions{
-		Name:           "hsup",
+		Name:           imageName,
 		InputStream:    inputBuf,
 		OutputStream:   outputBuf,
 		SuppressOutput: false,
 	}
 
 	if err := d.c.BuildImage(opts); err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return imageName, nil
 }

@@ -2,12 +2,13 @@ package main
 
 import (
 	"flag"
-	"github.com/cyberdelia/heroku-go/v3"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/cyberdelia/heroku-go/v3"
 )
 
 func fetchLatestRelease(client *heroku.Service, app string) (*heroku.Release, error) {
@@ -75,6 +76,7 @@ func start(app string, dd DynoDriver,
 	}
 
 	b := &Bundle{
+		app:     app,
 		argv:    args[1:],
 		config:  config,
 		release: release,

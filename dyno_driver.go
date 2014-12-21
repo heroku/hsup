@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/cyberdelia/heroku-go/v3"
 )
 
 type Bundle struct {
+	app     string
 	argv    []string
 	config  map[string]string
 	release *heroku.Release

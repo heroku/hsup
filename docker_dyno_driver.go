@@ -1,19 +1,23 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"syscall"
 	"time"
+
+	"github.com/fsouza/go-dockerclient"
 )
 
 type DockerDynoDriver struct {
 	d     *Docker
 	state DynoState
 
-	cmd     *exec.Cmd
-	waiting chan error
+	cmd       *exec.Cmd
+	container *docker.Container
+	waiting   chan error
 }
 
 func NewDockerDynoDriver() *DockerDynoDriver {
@@ -39,38 +43,36 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 	}
 
 	log.Printf("StackImage %+v", si)
-	err = dd.d.BuildSlugImage(si, b.slug.Blob.URL)
+	imageName, err := dd.d.BuildSlugImage(si, b)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println("Built image successfully")
 
-	dd.state = Started
-	dd.cmd = exec.Command(b.argv[0], b.argv[1:]...)
-
-	dd.cmd.Stdin = os.Stdin
-	dd.cmd.Stdout = os.Stdout
-	dd.cmd.Stderr = os.Stderr
-
 	// Fill environment vector from Heroku configuration.
+	env := make([]string, 0)
 	for k, v := range b.config {
-		dd.cmd.Env = append(dd.cmd.Env, k+"="+v)
+		env = append(env, k+"="+v)
 	}
 
-	dd.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	err = dd.cmd.Start()
+	dd.container, err = dd.d.c.CreateContainer(docker.CreateContainerOptions{
+		Name: fmt.Sprintf("%v-%v", imageName, int32(time.Now().Unix())),
+		Config: &docker.Config{
+			Cmd:   b.argv,
+			Env:   env,
+			Image: imageName,
+		},
+	})
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
 
-	dd.waiting = make(chan error)
+	err = dd.d.c.StartContainer(dd.container.ID, &docker.HostConfig{})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	go func() {
-		log.Println("wait start")
-		dd.waiting <- dd.cmd.Wait()
-		log.Println("wait complete")
-	}()
+	dd.state = Started
 
 	return nil
 }
