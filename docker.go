@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/fsouza/go-dockerclient"
+	"os"
 )
 
 type StackImage struct {
@@ -16,7 +17,10 @@ type Docker struct {
 }
 
 func (d *Docker) Connect() (err error) {
-	endpoint := "unix:///var/run/docker.sock"
+	endpoint := os.Getenv("DOCKER_HOST")
+	if endpoint == "" {
+		endpoint = "unix:///var/run/docker.sock"
+	}
 	d.c, err = docker.NewClient(endpoint)
 	return err
 }

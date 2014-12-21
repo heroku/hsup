@@ -71,6 +71,12 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 }
 
 func (dd *DockerDynoDriver) Stop() error {
+	// If we could never start the process, don't worry about stopping it. May
+	// occur in cases like if Docker was down.
+	if dd.cmd == nil {
+		return nil
+	}
+
 	p := dd.cmd.Process
 
 	group, err := os.FindProcess(-1 * p.Pid)
