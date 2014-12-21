@@ -55,10 +55,17 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 		env = append(env, k+"="+v)
 	}
 
+	var cmd []string
+	if b.formation != nil {
+		cmd = []string{b.formation.Command}
+	} else {
+		cmd = b.argv
+	}
+
 	dd.container, err = dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: fmt.Sprintf("%v-%v", imageName, int32(time.Now().Unix())),
 		Config: &docker.Config{
-			Cmd:   b.argv,
+			Cmd:   cmd,
 			Env:   env,
 			Image: imageName,
 		},

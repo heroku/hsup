@@ -7,11 +7,12 @@ import (
 )
 
 type Bundle struct {
-	app     string
-	argv    []string
-	config  map[string]string
-	release *heroku.Release
-	slug    *heroku.Slug
+	app        string
+	argv       []string
+	config     map[string]string
+	formation  *heroku.Formation
+	release    *heroku.Release
+	slug       *heroku.Slug
 }
 
 type DynoState int

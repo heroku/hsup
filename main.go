@@ -64,7 +64,7 @@ func startReleasePoll(client *heroku.Service, app string) (
 }
 
 func start(app string, dd DynoDriver,
-	release *heroku.Release, args []string, cl *heroku.Service) {
+	release *heroku.Release, args []string, processTypeName *string, cl *heroku.Service) {
 	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
@@ -75,12 +75,21 @@ func start(app string, dd DynoDriver,
 		log.Fatal("hsup could not get slug info: " + err.Error())
 	}
 
+	var formation *heroku.Formation
+	if *processTypeName != "" {
+		formation, err = cl.FormationInfo(app, *processTypeName)
+		if err != nil {
+			log.Fatal("hsup could not get formation list: " + err.Error())
+		}
+	}
+
 	b := &Bundle{
-		app:     app,
-		argv:    args[1:],
-		config:  config,
-		release: release,
-		slug:    slug,
+		app:        app,
+		argv:       args[1:],
+		config:     config,
+		formation:  formation,
+		release:    release,
+		slug:       slug,
 	}
 
 again:
@@ -124,13 +133,15 @@ func main() {
 	cl := heroku.NewService(heroku.DefaultClient)
 	dynoDriverName := flag.String("dynodriver", "simple",
 		"specify a dynoDriver driver (program that starts a program)")
+	processTypeName := flag.String("type", "",
+		"specify the type of process to start")
 	flag.Parse()
 	args := flag.Args()
-	switch len(args) {
-	case 0:
+
+	if len(args) == 0 {
 		log.Fatal("hsup requires an app name")
-	case 1:
-		log.Fatal("hsup requires an argument program")
+	} else if len(args) == 1 && *processTypeName == "" {
+		log.Fatal("hsup requires a process type or argument program")
 	}
 
 	dynoDriver, err := FindDynoDriver(*dynoDriverName)
@@ -147,7 +158,7 @@ func main() {
 	for {
 		select {
 		case release := <-out:
-			start(app, dynoDriver, release, args, cl)
+			start(app, dynoDriver, release, args, processTypeName, cl)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
 			err = dynoDriver.Stop()
