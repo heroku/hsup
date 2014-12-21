@@ -38,7 +38,11 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 		return err
 	}
 
-	log.Println(si)
+	log.Printf("StackImage %+v", si)
+	err = dd.d.BuildSlugImage(si)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	dd.state = Started
 	dd.cmd = exec.Command(b.argv[0], b.argv[1:]...)
