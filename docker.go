@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/fsouza/go-dockerclient"
+	"log"
 	"os"
 	"time"
 )
@@ -55,16 +56,18 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 	return &si, nil
 }
 
-func (d *Docker) BuildSlugImage(si *StackImage) error {
+func (d *Docker) BuildSlugImage(si *StackImage, slugUrl string) error {
 	t := time.Now()
 	inputBuf, outputBuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 	tr := tar.NewWriter(inputBuf)
 	dockerContents := fmt.Sprintf(`FROM %s
 RUN rm -rf /app
-RUN curl '%s' -o /slug.img
-RUN (unsquashfs -d /app /slug.img || (cd / && mkdir /app && tar -xzf /slug.img)) && rm -f /app/log /app/tmp && mkdir /app/log /app/tmp &&  chown -R daemon:daemon /app && chmod -R gor /app && find /app -type d | xargs chmod gox
+RUN curl --verbose '%s' -o /tmp/slug.img 1>&2
+RUN (unsquashfs -d /app /tmp/slug.img || (cd / && mkdir /app && tar -xzf /tmp/slug.img)) && rm -f /app/log /app/tmp && mkdir /app/log /app/tmp &&  chown -R daemon:daemon /app && chmod -R gor /app && find /app -type d | xargs chmod gox
 WORKDIR /app
-`, si.img.ID, "http://localhost/bogus")
+`, si.img.ID, slugUrl)
+
+	log.Println(dockerContents)
 	tr.WriteHeader(&tar.Header{
 		Name:    "Dockerfile",
 		Size:    int64(len(dockerContents)),
@@ -74,9 +77,10 @@ WORKDIR /app
 	tr.Close()
 
 	opts := docker.BuildImageOptions{
-		Name:         "hsup",
-		InputStream:  inputBuf,
-		OutputStream: outputBuf,
+		Name:           "hsup",
+		InputStream:    inputBuf,
+		OutputStream:   outputBuf,
+		SuppressOutput: false,
 	}
 
 	if err := d.c.BuildImage(opts); err != nil {

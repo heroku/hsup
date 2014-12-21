@@ -39,7 +39,7 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 	}
 
 	log.Printf("StackImage %+v", si)
-	err = dd.d.BuildSlugImage(si)
+	err = dd.d.BuildSlugImage(si, b.slug.Blob.URL)
 	if err != nil {
 		log.Fatal(err)
 	}
