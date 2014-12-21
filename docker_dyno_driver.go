@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"time"
 
@@ -78,6 +79,14 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 	}
 
 	dd.state = Started
+
+	go dd.d.c.Logs(docker.LogsOptions{
+		Container:    dd.container.ID,
+		Stdout:       true,
+		Stderr:       true,
+		Follow:       true,
+		OutputStream: os.Stdout,
+	})
 
 	return nil
 }
