@@ -22,16 +22,16 @@ func (dd *SimpleDynoDriver) State() DynoState {
 	return dd.state
 }
 
-func (dd *SimpleDynoDriver) Start(b *Bundle) error {
+func (dd *SimpleDynoDriver) Start(ex Executable) error {
 	dd.state = Started
-	dd.cmd = exec.Command(b.argv[0], b.argv[1:]...)
+	dd.cmd = exec.Command(ex.Args()[0], ex.Args()[1:]...)
 
 	dd.cmd.Stdin = os.Stdin
 	dd.cmd.Stdout = os.Stdout
 	dd.cmd.Stderr = os.Stderr
 
 	// Fill environment vector from Heroku configuration.
-	for k, v := range b.config {
+	for k, v := range ex.Config() {
 		dd.cmd.Env = append(dd.cmd.Env, k+"="+v)
 	}
 

@@ -27,7 +27,7 @@ func (dd *DockerDynoDriver) State() DynoState {
 	return dd.state
 }
 
-func (dd *DockerDynoDriver) Start(b *Bundle) error {
+func (dd *DockerDynoDriver) Start(ex Executable) error {
 	if dd.d == nil {
 		dd.d = &Docker{}
 		if err := dd.d.Connect(); err != nil {
@@ -42,7 +42,7 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 	}
 
 	log.Printf("StackImage %+v", si)
-	imageName, err := dd.d.BuildSlugImage(si, b)
+	imageName, err := dd.d.BuildSlugImage(si, ex)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,21 +50,14 @@ func (dd *DockerDynoDriver) Start(b *Bundle) error {
 
 	// Fill environment vector from Heroku configuration.
 	env := make([]string, 0)
-	for k, v := range b.config {
+	for k, v := range ex.Config() {
 		env = append(env, k+"="+v)
-	}
-
-	var cmd []string
-	if b.formation != nil {
-		cmd = []string{b.formation.Command}
-	} else {
-		cmd = b.argv
 	}
 
 	dd.container, err = dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: fmt.Sprintf("%v-%v", imageName, int32(time.Now().Unix())),
 		Config: &docker.Config{
-			Cmd:   cmd,
+			Cmd:   ex.Args(),
 			Env:   env,
 			Image: imageName,
 		},

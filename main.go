@@ -83,7 +83,7 @@ func start(app string, dd DynoDriver,
 		}
 	}
 
-	b := &Bundle{
+	b := &Api3Executor{
 		app:       app,
 		argv:      args[1:],
 		config:    config,
