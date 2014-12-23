@@ -16,12 +16,8 @@ type DockerDynoDriver struct {
 }
 
 func (dd *DockerDynoDriver) Build(release *Release) error {
-	if dd.d == nil {
-		dd.d = &Docker{}
-		if err := dd.d.Connect(); err != nil {
-			dd.d = nil
-			return err
-		}
+	if err := dd.connectDocker(); err != nil {
+		return err
 	}
 
 	si, err := dd.d.StackStat("cedar-14")
@@ -44,14 +40,6 @@ func (dd *DockerDynoDriver) State() DynoState {
 }
 
 func (dd *DockerDynoDriver) Start(release *Release, ex *Executor) error {
-	if dd.d == nil {
-		dd.d = &Docker{}
-		if err := dd.d.Connect(); err != nil {
-			dd.d = nil
-			return err
-		}
-	}
-
 	ex.containers = make([]*docker.Container, 0)
 
 	// Fill environment vector from Heroku configuration.
@@ -100,5 +88,17 @@ func (dd *DockerDynoDriver) Stop(ex *Executor) error {
 
 	// @todo: need to be move this onto an executor instead of a driver
 	dd.state = Stopped
+	return nil
+}
+
+func (dd *DockerDynoDriver) connectDocker() error {
+	if dd.d == nil {
+		dd.d = &Docker{}
+		if err := dd.d.Connect(); err != nil {
+			dd.d = nil
+			return err
+		}
+	}
+
 	return nil
 }
