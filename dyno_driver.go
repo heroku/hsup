@@ -8,6 +8,7 @@ import (
 
 type Release struct {
 	appName string
+	config map[string]string
 	slugUrl string
 	version int
 }
@@ -18,35 +19,19 @@ func (r *Release) Name() string {
 
 type Executable interface {
 	Args() []string
-	Config() map[string]string
-	SlugUrl() string
 }
 
 type Api3Executor struct {
-	app       string
 	argv      []string
-	config    map[string]string
 	formation *heroku.Formation
-	release   *heroku.Release
-	slug      *heroku.Slug
 }
 
 func (b *Api3Executor) Args() []string {
-	var cmd []string
 	if b.formation != nil {
-		cmd = []string{b.formation.Command}
+		return []string{b.formation.Command}
 	} else {
-		cmd = b.argv
+		return b.argv
 	}
-	return cmd
-}
-
-func (b *Api3Executor) Config() map[string]string {
-	return b.config
-}
-
-func (b *Api3Executor) SlugUrl() string {
-	return b.slug.Blob.URL
 }
 
 type DynoState int

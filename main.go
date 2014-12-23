@@ -64,7 +64,7 @@ func startReleasePoll(client *heroku.Service, app string) (
 }
 
 func start(app string, dd DynoDriver,
-	release *heroku.Release, args []string, processTypeName *string, cl *heroku.Service) {
+	release *heroku.Release, argv []string, processTypeName *string, cl *heroku.Service) {
 	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
@@ -77,15 +77,12 @@ func start(app string, dd DynoDriver,
 
 	newExecutor := func() *Api3Executor {
 		return &Api3Executor{
-			app:     app,
-			config:  config,
-			release: release,
-			slug:    slug,
+			argv: argv,
 		}
 	}
 
 	var executors []*Api3Executor
-	if len(args) == 0 {
+	if len(argv) == 0 {
 		var formations []*heroku.Formation
 		if *processTypeName == "" {
 			formations, err = cl.FormationList(app, &heroku.ListRange{})
@@ -108,12 +105,13 @@ func start(app string, dd DynoDriver,
 		}
 	} else {
 		executor := newExecutor()
-		executor.argv = args[1:]
+		executor.argv = argv
 		executors = []*Api3Executor{executor}
 	}
 
 	release2 := &Release{
 		appName: app,
+		config:  config,
 		slugUrl: slug.Blob.URL,
 		version: release.Version,
 	}

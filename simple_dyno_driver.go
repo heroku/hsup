@@ -35,7 +35,7 @@ func (dd *SimpleDynoDriver) Start(release *Release, ex Executable) error {
 	dd.cmd.Stderr = os.Stderr
 
 	// Fill environment vector from Heroku configuration.
-	for k, v := range ex.Config() {
+	for k, v := range release.config {
 		dd.cmd.Env = append(dd.cmd.Env, k+"="+v)
 	}
 
