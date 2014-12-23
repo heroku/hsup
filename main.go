@@ -94,11 +94,14 @@ func start(app string, dd DynoDriver,
 		}
 
 		for _, formation := range formations {
-			executor := &Executor{formation: formation}
+			executor := &Executor{
+				formation: formation,
+				quantity: formation.Quantity,
+			}
 			executors = append(executors, executor)
 		}
 	} else {
-		executor := &Executor{argv: argv}
+		executor := &Executor{argv: argv, quantity: 1}
 		executors = []*Executor{executor}
 	}
 

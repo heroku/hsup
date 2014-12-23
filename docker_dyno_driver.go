@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/fsouza/go-dockerclient"
 )
@@ -48,21 +47,23 @@ func (dd *DockerDynoDriver) Start(release *Release, ex *Executor) error {
 		env = append(env, k+"="+v)
 	}
 
-	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
-		Name: fmt.Sprintf("%v-%v", release.imageName, int32(time.Now().Unix())),
-		Config: &docker.Config{
-			Cmd:   ex.Args(),
-			Env:   env,
-			Image: release.imageName,
-		},
-	})
-	if err != nil {
-		log.Fatal(err)
+	for i := 0; i < ex.quantity; i++ {
+		container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
+			Name: fmt.Sprintf("%v-%v", ex.Name(), i + 1),
+			Config: &docker.Config{
+				Cmd:   ex.Args(),
+				Env:   env,
+				Image: release.imageName,
+			},
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+		ex.containers = append(ex.containers, container)
 	}
-	ex.containers = append(ex.containers, container)
 
 	for _, container := range ex.containers {
-		err = dd.d.c.StartContainer(container.ID, &docker.HostConfig{})
+		err := dd.d.c.StartContainer(container.ID, &docker.HostConfig{})
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -24,6 +24,7 @@ func (r *Release) Name() string {
 type Executor struct {
 	argv      []string
 	formation *heroku.Formation
+	quantity  int
 
 	// docker dyno driver properties
 	containers []*docker.Container
@@ -34,6 +35,14 @@ func (e *Executor) Args() []string {
 		return []string{e.formation.Command}
 	} else {
 		return e.argv
+	}
+}
+
+func (e *Executor) Name() string {
+	if e.formation != nil {
+		return e.formation.Type
+	} else {
+		return "run"
 	}
 }
 
