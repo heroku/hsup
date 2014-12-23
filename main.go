@@ -87,7 +87,7 @@ func start(app string, dd DynoDriver,
 	var executors []*Api3Executor
 	if len(args) == 0 {
 		var formations []*heroku.Formation
-		if processTypeName == nil {
+		if *processTypeName == "" {
 			formations, err = cl.FormationList(app, &heroku.ListRange{})
 			if err != nil {
 				log.Fatal("hsup could not get formation list: " + err.Error())
@@ -188,7 +188,7 @@ func main() {
 	for {
 		select {
 		case release := <-out:
-			start(app, dynoDriver, release, args, processTypeName, cl)
+			start(app, dynoDriver, release, args[1:], processTypeName, cl)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
 			err = dynoDriver.Stop()

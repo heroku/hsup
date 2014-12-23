@@ -14,10 +14,10 @@ type DockerDynoDriver struct {
 	d     *Docker
 	state DynoState
 
-	releaseStates map[*Release]*DockerDynoDriverReleaseStateFactoryFactoryFactory
-	cmd       *exec.Cmd
+	releaseStates    map[*Release]*DockerDynoDriverReleaseStateFactoryFactoryFactory
+	cmd              *exec.Cmd
 	executableStates map[Executable]*DockerDynoDriverExecutableStateFactoryFactorFactory
-	waiting   chan error
+	waiting          chan error
 }
 
 type DockerDynoDriverReleaseStateFactoryFactoryFactory struct {
@@ -31,7 +31,7 @@ type DockerDynoDriverExecutableStateFactoryFactorFactory struct {
 func NewDockerDynoDriver() *DockerDynoDriver {
 	return &DockerDynoDriver{
 		executableStates: make(map[Executable]*DockerDynoDriverExecutableStateFactoryFactorFactory),
-		releaseStates: make(map[*Release]*DockerDynoDriverReleaseStateFactoryFactoryFactory),
+		releaseStates:    make(map[*Release]*DockerDynoDriverReleaseStateFactoryFactoryFactory),
 	}
 }
 
@@ -103,7 +103,7 @@ func (dd *DockerDynoDriver) Start(release *Release, ex Executable) error {
 	}
 	executableState.containers = append(executableState.containers, container)
 
-	for _, container := range(executableState.containers) {
+	for _, container := range executableState.containers {
 		err = dd.d.c.StartContainer(container.ID, &docker.HostConfig{})
 		if err != nil {
 			log.Fatal(err)
@@ -123,8 +123,8 @@ func (dd *DockerDynoDriver) Start(release *Release, ex Executable) error {
 }
 
 func (dd *DockerDynoDriver) Stop() error {
-	for _, exState := range(dd.executableStates) {
-		for _, container := range(exState.containers) {
+	for _, exState := range dd.executableStates {
+		for _, container := range exState.containers {
 			err := dd.d.c.StopContainer(container.ID, 10)
 			return err
 		}
