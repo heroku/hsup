@@ -9,9 +9,8 @@ import (
 type Executable interface {
 	Args() []string
 	Config() map[string]string
+	Name() string
 	SlugUrl() string
-	App() string
-	Version() int
 }
 
 type Api3Executor struct {
@@ -37,16 +36,12 @@ func (b *Api3Executor) Config() map[string]string {
 	return b.config
 }
 
+func (b *Api3Executor) Name() string {
+	return fmt.Sprintf("%v-%v", b.app, b.release.Version)
+}
+
 func (b *Api3Executor) SlugUrl() string {
 	return b.slug.Blob.URL
-}
-
-func (b *Api3Executor) App() string {
-	return b.app
-}
-
-func (b *Api3Executor) Version() int {
-	return b.release.Version
 }
 
 type DynoState int

@@ -78,7 +78,7 @@ WORKDIR /app
 	tr.Write([]byte(dockerContents))
 	tr.Close()
 
-	imageName := fmt.Sprintf("%v-%v", ex.App(), ex.Version())
+	imageName := ex.Name()
 
 	opts := docker.BuildImageOptions{
 		Name:           imageName,
