@@ -18,11 +18,15 @@ func NewSimpleDynoDriver() *SimpleDynoDriver {
 	return &SimpleDynoDriver{}
 }
 
+func (dd *SimpleDynoDriver) Build(release *Release) error {
+	return nil
+}
+
 func (dd *SimpleDynoDriver) State() DynoState {
 	return dd.state
 }
 
-func (dd *SimpleDynoDriver) Start(ex Executable) error {
+func (dd *SimpleDynoDriver) Start(release *Release, ex Executable) error {
 	dd.state = Started
 	dd.cmd = exec.Command(ex.Args()[0], ex.Args()[1:]...)
 

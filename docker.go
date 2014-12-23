@@ -57,8 +57,8 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 	return &si, nil
 }
 
-func (d *Docker) BuildSlugImage(si *StackImage, ex Executable) (string, error) {
-	slugUrl := ex.SlugUrl()
+func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error) {
+	slugUrl := release.slugUrl
 	t := time.Now()
 	inputBuf, outputBuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 	tr := tar.NewWriter(inputBuf)
@@ -78,7 +78,7 @@ WORKDIR /app
 	tr.Write([]byte(dockerContents))
 	tr.Close()
 
-	imageName := ex.Name()
+	imageName := release.Name()
 
 	opts := docker.BuildImageOptions{
 		Name:           imageName,

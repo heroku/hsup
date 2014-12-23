@@ -75,21 +75,51 @@ func start(app string, dd DynoDriver,
 		log.Fatal("hsup could not get slug info: " + err.Error())
 	}
 
-	var formation *heroku.Formation
-	if *processTypeName != "" {
-		formation, err = cl.FormationInfo(app, *processTypeName)
-		if err != nil {
-			log.Fatal("hsup could not get formation list: " + err.Error())
+	newExecutor := func() *Api3Executor {
+		return &Api3Executor{
+			app:     app,
+			config:  config,
+			release: release,
+			slug:    slug,
 		}
 	}
 
-	b := &Api3Executor{
-		app:       app,
-		argv:      args[1:],
-		config:    config,
-		formation: formation,
-		release:   release,
-		slug:      slug,
+	var executors []*Api3Executor
+	if len(args) == 0 {
+		var formations []*heroku.Formation
+		if processTypeName == nil {
+			formations, err = cl.FormationList(app, &heroku.ListRange{})
+			if err != nil {
+				log.Fatal("hsup could not get formation list: " + err.Error())
+			}
+			formations = formations
+		} else {
+			formation, err := cl.FormationInfo(app, *processTypeName)
+			if err != nil {
+				log.Fatal("hsup could not get formation list: " + err.Error())
+			}
+			formations = []*heroku.Formation{formation}
+		}
+
+		for _, formation := range formations {
+			executor := newExecutor()
+			executor.formation = formation
+			executors = append(executors, executor)
+		}
+	} else {
+		executor := newExecutor()
+		executor.argv = args[1:]
+		executors = []*Api3Executor{executor}
+	}
+
+	release2 := &Release{
+		appName: app,
+		slugUrl: slug.Blob.URL,
+		version: release.Version,
+	}
+	err = dd.Build(release2)
+	if err != nil {
+		log.Fatal("hsup could not bake image for release " + release2.Name() + ": " + err.Error())
 	}
 
 again:
@@ -99,11 +129,13 @@ again:
 		fallthrough
 	case Stopped:
 		log.Println("starting")
-		err = dd.Start(b)
-		if err != nil {
-			log.Println(
-				"process could not start with error:",
-				err)
+		for _, executor := range executors {
+			err = dd.Start(release2, executor)
+			if err != nil {
+				log.Println(
+					"process could not start with error:",
+					err)
+			}
 		}
 		log.Println("started")
 	case Started:
@@ -140,8 +172,6 @@ func main() {
 
 	if len(args) == 0 {
 		log.Fatal("hsup requires an app name")
-	} else if len(args) == 1 && *processTypeName == "" {
-		log.Fatal("hsup requires a process type or argument program")
 	}
 
 	dynoDriver, err := FindDynoDriver(*dynoDriverName)

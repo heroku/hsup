@@ -6,10 +6,19 @@ import (
 	"github.com/cyberdelia/heroku-go/v3"
 )
 
+type Release struct {
+	appName string
+	slugUrl string
+	version int
+}
+
+func (r *Release) Name() string {
+	return fmt.Sprintf("%v-%v", r.appName, r.version)
+}
+
 type Executable interface {
 	Args() []string
 	Config() map[string]string
-	Name() string
 	SlugUrl() string
 }
 
@@ -34,10 +43,6 @@ func (b *Api3Executor) Args() []string {
 
 func (b *Api3Executor) Config() map[string]string {
 	return b.config
-}
-
-func (b *Api3Executor) Name() string {
-	return fmt.Sprintf("%v-%v", b.app, b.release.Version)
 }
 
 func (b *Api3Executor) SlugUrl() string {
@@ -65,7 +70,8 @@ func FindDynoDriver(name string) (DynoDriver, error) {
 }
 
 type DynoDriver interface {
-	Start(Executable) error
+	Build(*Release) error
+	Start(*Release, Executable) error
 	Stop() error
 	State() DynoState
 }
