@@ -26,7 +26,7 @@ func (dd *SimpleDynoDriver) State() DynoState {
 	return dd.state
 }
 
-func (dd *SimpleDynoDriver) Start(release *Release, ex Executable) error {
+func (dd *SimpleDynoDriver) Start(release *Release, ex *Executor) error {
 	dd.state = Started
 	dd.cmd = exec.Command(ex.Args()[0], ex.Args()[1:]...)
 
@@ -57,7 +57,7 @@ func (dd *SimpleDynoDriver) Start(release *Release, ex Executable) error {
 	return nil
 }
 
-func (dd *SimpleDynoDriver) Stop() error {
+func (dd *SimpleDynoDriver) Stop(ex *Executor) error {
 	p := dd.cmd.Process
 
 	group, err := os.FindProcess(-1 * p.Pid)

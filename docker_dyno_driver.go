@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -13,26 +12,11 @@ import (
 type DockerDynoDriver struct {
 	d     *Docker
 	state DynoState
-
-	releaseStates    map[*Release]*DockerDynoDriverReleaseStateFactoryFactoryFactory
-	cmd              *exec.Cmd
-	executableStates map[Executable]*DockerDynoDriverExecutableStateFactoryFactorFactory
 	waiting          chan error
 }
 
-type DockerDynoDriverReleaseStateFactoryFactoryFactory struct {
-	imageName string
-}
-
-type DockerDynoDriverExecutableStateFactoryFactorFactory struct {
-	containers []*docker.Container
-}
-
 func NewDockerDynoDriver() *DockerDynoDriver {
-	return &DockerDynoDriver{
-		executableStates: make(map[Executable]*DockerDynoDriverExecutableStateFactoryFactorFactory),
-		releaseStates:    make(map[*Release]*DockerDynoDriverReleaseStateFactoryFactoryFactory),
-	}
+	return &DockerDynoDriver{}
 }
 
 func (dd *DockerDynoDriver) Build(release *Release) error {
@@ -55,10 +39,7 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 	}
 	log.Println("Built image successfully")
 
-	dd.releaseStates[release] = &DockerDynoDriverReleaseStateFactoryFactoryFactory{
-		imageName: imageName,
-	}
-
+	release.imageName = imageName
 	return nil
 }
 
@@ -66,7 +47,7 @@ func (dd *DockerDynoDriver) State() DynoState {
 	return dd.state
 }
 
-func (dd *DockerDynoDriver) Start(release *Release, ex Executable) error {
+func (dd *DockerDynoDriver) Start(release *Release, ex *Executor) error {
 	if dd.d == nil {
 		dd.d = &Docker{}
 		if err := dd.d.Connect(); err != nil {
@@ -75,14 +56,7 @@ func (dd *DockerDynoDriver) Start(release *Release, ex Executable) error {
 		}
 	}
 
-	releaseState, ok := dd.releaseStates[release]
-	if !ok {
-		log.Fatal("Release state not found for: " + release.Name())
-	}
-
-	executableState := &DockerDynoDriverExecutableStateFactoryFactorFactory{
-		containers: make([]*docker.Container, 0),
-	}
+	ex.containers = make([]*docker.Container, 0)
 
 	// Fill environment vector from Heroku configuration.
 	env := make([]string, 0)
@@ -91,19 +65,19 @@ func (dd *DockerDynoDriver) Start(release *Release, ex Executable) error {
 	}
 
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
-		Name: fmt.Sprintf("%v-%v", releaseState.imageName, int32(time.Now().Unix())),
+		Name: fmt.Sprintf("%v-%v", release.imageName, int32(time.Now().Unix())),
 		Config: &docker.Config{
 			Cmd:   ex.Args(),
 			Env:   env,
-			Image: releaseState.imageName,
+			Image: release.imageName,
 		},
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	executableState.containers = append(executableState.containers, container)
+	ex.containers = append(ex.containers, container)
 
-	for _, container := range executableState.containers {
+	for _, container := range ex.containers {
 		err = dd.d.c.StartContainer(container.ID, &docker.HostConfig{})
 		if err != nil {
 			log.Fatal(err)
@@ -122,14 +96,13 @@ func (dd *DockerDynoDriver) Start(release *Release, ex Executable) error {
 	return nil
 }
 
-func (dd *DockerDynoDriver) Stop() error {
-	for _, exState := range dd.executableStates {
-		for _, container := range exState.containers {
-			err := dd.d.c.StopContainer(container.ID, 10)
-			return err
-		}
+func (dd *DockerDynoDriver) Stop(ex *Executor) error {
+	for _, container := range ex.containers {
+		err := dd.d.c.StopContainer(container.ID, 10)
+		return err
 	}
 
+	// @todo: need to be move this onto an executor instead of a driver
 	dd.state = Stopped
 	return nil
 }

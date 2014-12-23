@@ -11,6 +11,8 @@ import (
 	"github.com/cyberdelia/heroku-go/v3"
 )
 
+var executors []*Executor
+
 func fetchLatestRelease(client *heroku.Service, app string) (*heroku.Release, error) {
 	releases, err := client.ReleaseList(
 		app, &heroku.ListRange{Descending: true, Field: "version", Max: 1})
@@ -75,13 +77,6 @@ func start(app string, dd DynoDriver,
 		log.Fatal("hsup could not get slug info: " + err.Error())
 	}
 
-	newExecutor := func() *Api3Executor {
-		return &Api3Executor{
-			argv: argv,
-		}
-	}
-
-	var executors []*Api3Executor
 	if len(argv) == 0 {
 		var formations []*heroku.Formation
 		if *processTypeName == "" {
@@ -99,14 +94,12 @@ func start(app string, dd DynoDriver,
 		}
 
 		for _, formation := range formations {
-			executor := newExecutor()
-			executor.formation = formation
+			executor := &Executor{formation: formation}
 			executors = append(executors, executor)
 		}
 	} else {
-		executor := newExecutor()
-		executor.argv = argv
-		executors = []*Api3Executor{executor}
+		executor := &Executor{argv: argv}
+		executors = []*Executor{executor}
 	}
 
 	release2 := &Release{
@@ -138,9 +131,11 @@ again:
 		log.Println("started")
 	case Started:
 		log.Println("Attempting to stop...")
-		err = dd.Stop()
-		if err != nil {
-			log.Println("process stopped with error:", err)
+		for _, executor := range executors {
+			err = dd.Stop(executor)
+			if err != nil {
+				log.Println("process stopped with error:", err)
+			}
 		}
 		log.Println("...stopped")
 		goto again
@@ -189,9 +184,13 @@ func main() {
 			start(app, dynoDriver, release, args[1:], processTypeName, cl)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
-			err = dynoDriver.Stop()
-			if err != nil {
-				log.Println("process stopped with error:", err)
+			if executors != nil {
+				for _, executor := range(executors) {
+					err = dynoDriver.Stop(executor)
+					if err != nil {
+						log.Println("process stopped with error:", err)
+					}
+				}
 			}
 			os.Exit(1)
 		}

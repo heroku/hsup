@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cyberdelia/heroku-go/v3"
+	"github.com/fsouza/go-dockerclient"
 )
 
 type Release struct {
@@ -11,26 +12,28 @@ type Release struct {
 	config map[string]string
 	slugUrl string
 	version int
+
+	// docker dyno driver properties
+	imageName string
 }
 
 func (r *Release) Name() string {
 	return fmt.Sprintf("%v-%v", r.appName, r.version)
 }
 
-type Executable interface {
-	Args() []string
-}
-
-type Api3Executor struct {
+type Executor struct {
 	argv      []string
 	formation *heroku.Formation
+
+	// docker dyno driver properties
+	containers []*docker.Container
 }
 
-func (b *Api3Executor) Args() []string {
-	if b.formation != nil {
-		return []string{b.formation.Command}
+func (e *Executor) Args() []string {
+	if e.formation != nil {
+		return []string{e.formation.Command}
 	} else {
-		return b.argv
+		return e.argv
 	}
 }
 
@@ -56,7 +59,7 @@ func FindDynoDriver(name string) (DynoDriver, error) {
 
 type DynoDriver interface {
 	Build(*Release) error
-	Start(*Release, Executable) error
-	Stop() error
+	Start(*Release, *Executor) error
+	Stop(*Executor) error
 	State() DynoState
 }
