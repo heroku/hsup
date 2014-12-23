@@ -14,10 +14,6 @@ type SimpleDynoDriver struct {
 	state   DynoState
 }
 
-func NewSimpleDynoDriver() *SimpleDynoDriver {
-	return &SimpleDynoDriver{}
-}
-
 func (dd *SimpleDynoDriver) Build(release *Release) error {
 	return nil
 }

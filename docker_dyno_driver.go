@@ -15,10 +15,6 @@ type DockerDynoDriver struct {
 	waiting          chan error
 }
 
-func NewDockerDynoDriver() *DockerDynoDriver {
-	return &DockerDynoDriver{}
-}
-
 func (dd *DockerDynoDriver) Build(release *Release) error {
 	if dd.d == nil {
 		dd.d = &Docker{}

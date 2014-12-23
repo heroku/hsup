@@ -48,9 +48,9 @@ const (
 func FindDynoDriver(name string) (DynoDriver, error) {
 	switch name {
 	case "simple":
-		return NewSimpleDynoDriver(), nil
+		return &SimpleDynoDriver{}, nil
 	case "docker":
-		return NewDockerDynoDriver(), nil
+		return &DockerDynoDriver{}, nil
 	default:
 		return nil, fmt.Errorf("could not locate driver. "+
 			"specified by the user: %v", name)
