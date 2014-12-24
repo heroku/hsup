@@ -12,9 +12,8 @@ import (
 )
 
 type StackImage struct {
-	stack   string
-	repoTag string
-	img     docker.APIImages
+	stack string
+	img   docker.APIImages
 }
 
 type Docker struct {
@@ -26,20 +25,25 @@ func (d *Docker) Connect() (err error) {
 	if endpoint == "" {
 		endpoint = "unix:///var/run/docker.sock"
 	}
-	d.c, err = docker.NewClient(endpoint)
+	log.Printf("DOCKER_HOST = %v\n", endpoint)
+
+	certPath := os.Getenv("DOCKER_CERT_PATH")
+	log.Printf("DOCKER_CERT_PATH = %v\n", certPath)
+	if certPath == "" {
+		d.c, err = docker.NewClient(endpoint)
+	} else {
+		cert := certPath + "/cert.pem"
+		key := certPath + "/key.pem"
+		ca := certPath + "/ca.pem"
+		d.c, err = docker.NewTLSClient(endpoint, cert, key, ca)
+	}
 	return err
 }
 
 func (d *Docker) StackStat(stack string) (*StackImage, error) {
-	si := StackImage{}
-	switch stack {
-	case "cedar-14":
-		si.repoTag = "heroku/cedar:14"
-	default:
-		return nil, fmt.Errorf("unrecognized stack: %s", stack)
+	si := StackImage{
+		stack: stack,
 	}
-
-	si.stack = stack
 
 	imgs, err := d.c.ListImages(docker.ListImagesOptions{All: true})
 	if err != nil {
@@ -48,13 +52,14 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 
 	for _, img := range imgs {
 		for _, tag := range img.RepoTags {
-			if tag == si.repoTag {
+			if tag == stack {
 				si.img = img
+				return &si, nil
 			}
 		}
 	}
 
-	return &si, nil
+	return nil, nil
 }
 
 func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error) {
