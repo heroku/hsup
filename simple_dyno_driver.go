@@ -18,7 +18,7 @@ func (dd *SimpleDynoDriver) Build(release *Release) error {
 }
 
 func (dd *SimpleDynoDriver) Start(ex *Executor) error {
-	dd.cmd = exec.Command(ex.Args()[0], ex.Args()[1:]...)
+	dd.cmd = exec.Command(ex.argv[0], ex.argv[1:]...)
 
 	dd.cmd.Stdin = os.Stdin
 	dd.cmd.Stdout = os.Stdout

@@ -106,19 +106,21 @@ func start(app string, dd DynoDriver,
 
 		for _, formation := range formations {
 			executor := &Executor{
-				dynoDriver: dd,
-				formation:  formation,
-				quantity:   formation.Quantity,
-				release:    release2,
+				argv:        []string{formation.Command},
+				dynoDriver:  dd,
+				processType: formation.Type,
+				quantity:    formation.Quantity,
+				release:     release2,
 			}
 			executors = append(executors, executor)
 		}
 	} else {
 		executor := &Executor{
-			argv:       argv,
-			dynoDriver: dd,
-			quantity:   1,
-			release:    release2,
+			argv:        argv,
+			dynoDriver:  dd,
+			quantity:    1,
+			processType: "run",
+			release:     release2,
 		}
 		executors = []*Executor{executor}
 	}

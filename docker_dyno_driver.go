@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -48,9 +47,9 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 
 	for i := 0; i < ex.quantity; i++ {
 		container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
-			Name: fmt.Sprintf("%v-%v", ex.Name(), i+1),
+			Name: ex.Name(),
 			Config: &docker.Config{
-				Cmd:   ex.Args(),
+				Cmd:   ex.argv,
 				Env:   env,
 				Image: ex.release.imageName,
 			},

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/cyberdelia/heroku-go/v3"
 	"github.com/fsouza/go-dockerclient"
 )
 
@@ -23,31 +22,20 @@ func (r *Release) Name() string {
 }
 
 type Executor struct {
-	argv       []string
-	dynoDriver DynoDriver
-	formation  *heroku.Formation
-	quantity   int
-	release    *Release
-	state      DynoState
+	argv        []string
+	dynoDriver  DynoDriver
+	quantity    int
+	release     *Release
+	state       DynoState
+	processID   string
+	processType string
 
 	// docker dyno driver properties
 	containers []*docker.Container
 }
 
-func (e *Executor) Args() []string {
-	if e.formation != nil {
-		return []string{e.formation.Command}
-	} else {
-		return e.argv
-	}
-}
-
 func (e *Executor) Name() string {
-	if e.formation != nil {
-		return e.formation.Type
-	} else {
-		return "run"
-	}
+	return e.processType + "." + e.processID
 }
 
 func (e *Executor) Start() {
