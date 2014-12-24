@@ -99,7 +99,6 @@ func start(app string, dd DynoDriver,
 			if err != nil {
 				log.Fatal("hsup could not get formation list: " + err.Error())
 			}
-			formations = formations
 		} else {
 			formation, err := cl.FormationInfo(app, argv[0])
 			if err != nil {
