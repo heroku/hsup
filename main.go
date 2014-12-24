@@ -1,14 +1,15 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/cyberdelia/heroku-go/v3"
+	flag "github.com/ogier/pflag"
 )
 
 var executors []*Executor
@@ -66,7 +67,7 @@ func startReleasePoll(client *heroku.Service, app string) (
 }
 
 func start(app string, dd DynoDriver,
-	release *heroku.Release, argv []string, processTypeName *string, cl *heroku.Service) {
+	release *heroku.Release, argv []string, processTypeName *string, cl *heroku.Service, concurrency int) {
 	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
@@ -105,28 +106,42 @@ func start(app string, dd DynoDriver,
 		}
 
 		for _, formation := range formations {
+			log.Printf("formation quantity=%v type=%v\n",
+				formation.Quantity, formation.Type)
+
+			for i := 0; i < getConcurrency(concurrency, formation.Quantity); i++ {
+				executor := &Executor{
+					argv:        []string{formation.Command},
+					dynoDriver:  dd,
+					processID:   strconv.Itoa(i + 1),
+					processType: formation.Type,
+					release:     release2,
+				}
+				executors = append(executors, executor)
+			}
+		}
+	} else {
+		for i := 0; i < getConcurrency(concurrency, 1); i++ {
 			executor := &Executor{
-				argv:        []string{formation.Command},
+				argv:        argv,
 				dynoDriver:  dd,
-				processType: formation.Type,
-				quantity:    formation.Quantity,
+				processType: "run",
 				release:     release2,
 			}
 			executors = append(executors, executor)
 		}
-	} else {
-		executor := &Executor{
-			argv:        argv,
-			dynoDriver:  dd,
-			quantity:    1,
-			processType: "run",
-			release:     release2,
-		}
-		executors = []*Executor{executor}
 	}
 
 	for _, executor := range executors {
 		executor.Start()
+	}
+}
+
+func getConcurrency(concurrency int, defaultConcurrency int) int {
+	if concurrency == -1 {
+		return defaultConcurrency
+	} else {
+		return concurrency
 	}
 }
 
@@ -142,8 +157,10 @@ func main() {
 	heroku.DefaultTransport.Password = token
 
 	cl := heroku.NewService(heroku.DefaultClient)
-	dynoDriverName := flag.String("dynodriver", "simple",
-		"specify a dynoDriver driver (program that starts a program)")
+	concurrency := flag.IntP("concurrency", "c", -1,
+		"concurrency number")
+	dynoDriverName := flag.StringP("dynodriver", "d", "simple",
+		"specify a dyno driver (program that starts a program)")
 	processTypeName := flag.String("type", "",
 		"specify the type of process to start")
 	flag.Parse()
@@ -167,7 +184,7 @@ func main() {
 	for {
 		select {
 		case release := <-out:
-			start(app, dynoDriver, release, args[1:], processTypeName, cl)
+			start(app, dynoDriver, release, args[1:], processTypeName, cl, *concurrency)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
 			if executors != nil {

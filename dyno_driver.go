@@ -7,6 +7,20 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
+const (
+	NeverStarted DynoState = iota
+	Started
+	Stopped
+)
+
+type DynoDriver interface {
+	Build(*Release) error
+	Start(*Executor) error
+	Stop(*Executor) error
+}
+
+type DynoState int
+
 type Release struct {
 	appName string
 	config  map[string]string
@@ -24,14 +38,13 @@ func (r *Release) Name() string {
 type Executor struct {
 	argv        []string
 	dynoDriver  DynoDriver
-	quantity    int
 	release     *Release
 	state       DynoState
 	processID   string
 	processType string
 
 	// docker dyno driver properties
-	containers []*docker.Container
+	container *docker.Container
 }
 
 func (e *Executor) Name() string {
@@ -45,43 +58,31 @@ again:
 	case NeverStarted:
 		fallthrough
 	case Stopped:
-		log.Println("starting")
+		log.Printf("%v: starting\n", e.Name())
 		err := e.dynoDriver.Start(e)
 		if err != nil {
-			log.Println(
-				"process could not start with error:",
-				err)
+			log.Printf("process could not start with error: %v\n", err)
 		}
 		e.state = Started
-		log.Println("started")
+		log.Printf("%v: started\n", e.Name())
 	case Started:
-		log.Println("Attempting to stop...")
-		err := e.dynoDriver.Stop(e)
-		if err != nil {
-			log.Println("process stopped with error:", err)
-		}
-		e.state = Stopped
-		log.Println("...stopped")
+		e.Stop()
 		goto again
 	default:
-		log.Fatalln("BUG bad state:", s)
+		log.Fatalf("BUG bad state: %v\n", s)
 	}
 }
 
 func (e *Executor) Stop() {
+	log.Printf("%v: stopping\n", e.Name())
 	err := e.dynoDriver.Stop(e)
 	if err != nil {
-		log.Println("process stopped with error:", err)
+		log.Printf("%v: stopped with error: %v", e.Name(), err.Error())
+	} else {
+		log.Printf("%v: stopped\n", e.Name())
 	}
+	e.state = Stopped
 }
-
-type DynoState int
-
-const (
-	NeverStarted DynoState = iota
-	Started
-	Stopped
-)
 
 func FindDynoDriver(name string) (DynoDriver, error) {
 	switch name {
@@ -93,10 +94,4 @@ func FindDynoDriver(name string) (DynoDriver, error) {
 		return nil, fmt.Errorf("could not locate driver. "+
 			"specified by the user: %v", name)
 	}
-}
-
-type DynoDriver interface {
-	Build(*Release) error
-	Start(*Executor) error
-	Stop(*Executor) error
 }
