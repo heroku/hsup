@@ -26,7 +26,18 @@ func (d *Docker) Connect() (err error) {
 	if endpoint == "" {
 		endpoint = "unix:///var/run/docker.sock"
 	}
-	d.c, err = docker.NewClient(endpoint)
+	log.Printf("DOCKER_HOST = %v\n", endpoint)
+
+	certPath := os.Getenv("DOCKER_CERT_PATH")
+	log.Printf("DOCKER_CERT_PATH = %v\n", certPath)
+	if certPath == "" {
+		d.c, err = docker.NewClient(endpoint)
+	} else {
+		cert := certPath + "/cert.pem"
+		key := certPath + "/key.pem"
+		ca := certPath + "/ca.pem"
+		d.c, err = docker.NewTLSClient(endpoint, cert, key, ca)
+	}
 	return err
 }
 
