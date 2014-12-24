@@ -126,6 +126,7 @@ func start(app string, dd DynoDriver,
 			executor := &Executor{
 				argv:        argv,
 				dynoDriver:  dd,
+				processID:   strconv.Itoa(i + 1),
 				processType: "run",
 				release:     release2,
 			}
