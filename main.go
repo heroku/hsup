@@ -132,9 +132,7 @@ func start(app string, dd DynoDriver,
 		}
 	}
 
-	for _, executor := range executors {
-		executor.Start()
-	}
+	startParallel()
 }
 
 func getConcurrency(concurrency int, defaultConcurrency int) int {
@@ -188,13 +186,33 @@ func main() {
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
 			if executors != nil {
-				for _, executor := range executors {
-					executor.Stop()
-				}
+				stopParallel()
 			}
 			os.Exit(1)
 		}
 	}
 
 	os.Exit(0)
+}
+
+func startParallel() {
+	for _, executor := range executors {
+		go executor.Start()
+	}
+}
+
+// Docker containers shut down slowly, so parallelize this operation
+func stopParallel() {
+	chans := make([]chan bool, len(executors))
+	for i, executor := range executors {
+		chans[i] = make(chan bool)
+		go func(executor *Executor, stopChan chan bool) {
+			executor.Stop()
+			stopChan <- true
+		}(executor, chans[i])
+	}
+
+	for _, stopChan := range(chans) {
+		<- stopChan
+	}
 }

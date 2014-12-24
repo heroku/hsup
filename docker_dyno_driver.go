@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/fsouza/go-dockerclient"
 )
@@ -43,8 +45,11 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 		env = append(env, k+"="+v)
 	}
 
+	// attach a timestamp as some extra entropy because container names must be
+	// unique
+	name := fmt.Sprintf("%v.%v", ex.Name(), time.Now().Unix())
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
-		Name: ex.Name(),
+		Name: name,
 		Config: &docker.Config{
 			Cmd:   ex.argv,
 			Env:   env,
