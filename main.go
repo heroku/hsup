@@ -77,6 +77,17 @@ func start(app string, dd DynoDriver,
 		log.Fatal("hsup could not get slug info: " + err.Error())
 	}
 
+	release2 := &Release{
+		appName: app,
+		config:  config,
+		slugUrl: slug.Blob.URL,
+		version: release.Version,
+	}
+	err = dd.Build(release2)
+	if err != nil {
+		log.Fatal("hsup could not bake image for release " + release2.Name() + ": " + err.Error())
+	}
+
 	if len(argv) == 0 {
 		var formations []*heroku.Formation
 		if *processTypeName == "" {
@@ -98,6 +109,7 @@ func start(app string, dd DynoDriver,
 				dynoDriver: dd,
 				formation: formation,
 				quantity: formation.Quantity,
+				release: release2,
 			}
 			executors = append(executors, executor)
 		}
@@ -106,19 +118,9 @@ func start(app string, dd DynoDriver,
 			argv: argv,
 			dynoDriver: dd,
 			quantity: 1,
+				release: release2,
 		}
 		executors = []*Executor{executor}
-	}
-
-	release2 := &Release{
-		appName: app,
-		config:  config,
-		slugUrl: slug.Blob.URL,
-		version: release.Version,
-	}
-	err = dd.Build(release2)
-	if err != nil {
-		log.Fatal("hsup could not bake image for release " + release2.Name() + ": " + err.Error())
 	}
 
 	for _, executor := range(executors) {

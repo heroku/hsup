@@ -18,9 +18,13 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 		return err
 	}
 
-	si, err := dd.d.StackStat("cedar-14")
+	stack := "heroku/cedar:14"
+	si, err := dd.d.StackStat(stack)
 	if err != nil {
 		return err
+	}
+	if si == nil {
+		log.Fatalf("Stack not found = %v\n", stack)
 	}
 
 	imageName, err := dd.d.BuildSlugImage(si, release)

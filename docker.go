@@ -12,9 +12,8 @@ import (
 )
 
 type StackImage struct {
-	stack   string
-	repoTag string
-	img     docker.APIImages
+	stack string
+	img   docker.APIImages
 }
 
 type Docker struct {
@@ -42,15 +41,9 @@ func (d *Docker) Connect() (err error) {
 }
 
 func (d *Docker) StackStat(stack string) (*StackImage, error) {
-	si := StackImage{}
-	switch stack {
-	case "cedar-14":
-		si.repoTag = "heroku/cedar:14"
-	default:
-		return nil, fmt.Errorf("unrecognized stack: %s", stack)
+	si := StackImage{
+		stack: stack,
 	}
-
-	si.stack = stack
 
 	imgs, err := d.c.ListImages(docker.ListImagesOptions{All: true})
 	if err != nil {
@@ -59,13 +52,14 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 
 	for _, img := range imgs {
 		for _, tag := range img.RepoTags {
-			if tag == si.repoTag {
+			if tag == stack {
 				si.img = img
+				return &si, nil
 			}
 		}
 	}
 
-	return &si, nil
+	return nil, nil
 }
 
 func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error) {
