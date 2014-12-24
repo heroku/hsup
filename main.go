@@ -95,13 +95,18 @@ func start(app string, dd DynoDriver,
 
 		for _, formation := range formations {
 			executor := &Executor{
+				dynoDriver: dd,
 				formation: formation,
 				quantity: formation.Quantity,
 			}
 			executors = append(executors, executor)
 		}
 	} else {
-		executor := &Executor{argv: argv, quantity: 1}
+		executor := &Executor{
+			argv: argv,
+			dynoDriver: dd,
+			quantity: 1,
+		}
 		executors = []*Executor{executor}
 	}
 
@@ -116,34 +121,8 @@ func start(app string, dd DynoDriver,
 		log.Fatal("hsup could not bake image for release " + release2.Name() + ": " + err.Error())
 	}
 
-again:
-	s := dd.State()
-	switch s {
-	case NeverStarted:
-		fallthrough
-	case Stopped:
-		log.Println("starting")
-		for _, executor := range executors {
-			err = dd.Start(release2, executor)
-			if err != nil {
-				log.Println(
-					"process could not start with error:",
-					err)
-			}
-		}
-		log.Println("started")
-	case Started:
-		log.Println("Attempting to stop...")
-		for _, executor := range executors {
-			err = dd.Stop(executor)
-			if err != nil {
-				log.Println("process stopped with error:", err)
-			}
-		}
-		log.Println("...stopped")
-		goto again
-	default:
-		log.Fatalln("BUG bad state:", s)
+	for _, executor := range(executors) {
+		executor.Start()
 	}
 }
 
@@ -189,10 +168,7 @@ func main() {
 			log.Println("hsup caught a deadly signal:", sig)
 			if executors != nil {
 				for _, executor := range(executors) {
-					err = dynoDriver.Stop(executor)
-					if err != nil {
-						log.Println("process stopped with error:", err)
-					}
+					executor.Stop()
 				}
 			}
 			os.Exit(1)

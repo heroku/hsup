@@ -11,19 +11,13 @@ import (
 type SimpleDynoDriver struct {
 	cmd     *exec.Cmd
 	waiting chan error
-	state   DynoState
 }
 
 func (dd *SimpleDynoDriver) Build(release *Release) error {
 	return nil
 }
 
-func (dd *SimpleDynoDriver) State() DynoState {
-	return dd.state
-}
-
-func (dd *SimpleDynoDriver) Start(release *Release, ex *Executor) error {
-	dd.state = Started
+func (dd *SimpleDynoDriver) Start(ex *Executor) error {
 	dd.cmd = exec.Command(ex.Args()[0], ex.Args()[1:]...)
 
 	dd.cmd.Stdin = os.Stdin
@@ -31,7 +25,7 @@ func (dd *SimpleDynoDriver) Start(release *Release, ex *Executor) error {
 	dd.cmd.Stderr = os.Stderr
 
 	// Fill environment vector from Heroku configuration.
-	for k, v := range release.config {
+	for k, v := range ex.release.config {
 		dd.cmd.Env = append(dd.cmd.Env, k+"="+v)
 	}
 
@@ -71,7 +65,6 @@ func (dd *SimpleDynoDriver) Stop(ex *Executor) error {
 			group.Signal(syscall.SIGKILL)
 		case err := <-dd.waiting:
 			log.Println("waited", group)
-			dd.state = Stopped
 			return err
 		}
 		log.Println("spin", group)

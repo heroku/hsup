@@ -10,7 +10,6 @@ import (
 
 type DockerDynoDriver struct {
 	d     *Docker
-	state DynoState
 	waiting          chan error
 }
 
@@ -34,16 +33,12 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 	return nil
 }
 
-func (dd *DockerDynoDriver) State() DynoState {
-	return dd.state
-}
-
-func (dd *DockerDynoDriver) Start(release *Release, ex *Executor) error {
+func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	ex.containers = make([]*docker.Container, 0)
 
 	// Fill environment vector from Heroku configuration.
 	env := make([]string, 0)
-	for k, v := range release.config {
+	for k, v := range ex.release.config {
 		env = append(env, k+"="+v)
 	}
 
@@ -53,7 +48,7 @@ func (dd *DockerDynoDriver) Start(release *Release, ex *Executor) error {
 			Config: &docker.Config{
 				Cmd:   ex.Args(),
 				Env:   env,
-				Image: release.imageName,
+				Image: ex.release.imageName,
 			},
 		})
 		if err != nil {
@@ -77,7 +72,6 @@ func (dd *DockerDynoDriver) Start(release *Release, ex *Executor) error {
 		})
 	}
 
-	dd.state = Started
 	return nil
 }
 
@@ -87,8 +81,6 @@ func (dd *DockerDynoDriver) Stop(ex *Executor) error {
 		return err
 	}
 
-	// @todo: need to be move this onto an executor instead of a driver
-	dd.state = Stopped
 	return nil
 }
 

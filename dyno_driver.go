@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/cyberdelia/heroku-go/v3"
 	"github.com/fsouza/go-dockerclient"
@@ -23,8 +24,11 @@ func (r *Release) Name() string {
 
 type Executor struct {
 	argv      []string
+	dynoDriver DynoDriver
 	formation *heroku.Formation
 	quantity  int
+	release  *Release
+	state DynoState
 
 	// docker dyno driver properties
 	containers []*docker.Container
@@ -43,6 +47,43 @@ func (e *Executor) Name() string {
 		return e.formation.Type
 	} else {
 		return "run"
+	}
+}
+
+func (e *Executor) Start() {
+again:
+	s := e.state
+	switch s {
+	case NeverStarted:
+		fallthrough
+	case Stopped:
+		log.Println("starting")
+		err := e.dynoDriver.Start(e)
+		if err != nil {
+			log.Println(
+				"process could not start with error:",
+				err)
+		}
+		e.state = Started
+		log.Println("started")
+	case Started:
+		log.Println("Attempting to stop...")
+		err := e.dynoDriver.Stop(e)
+		if err != nil {
+			log.Println("process stopped with error:", err)
+		}
+		e.state = Stopped
+		log.Println("...stopped")
+		goto again
+	default:
+		log.Fatalln("BUG bad state:", s)
+	}
+}
+
+func (e *Executor) Stop() {
+	err := e.dynoDriver.Stop(e)
+	if err != nil {
+		log.Println("process stopped with error:", err)
 	}
 }
 
@@ -68,7 +109,6 @@ func FindDynoDriver(name string) (DynoDriver, error) {
 
 type DynoDriver interface {
 	Build(*Release) error
-	Start(*Release, *Executor) error
+	Start(*Executor) error
 	Stop(*Executor) error
-	State() DynoState
 }
