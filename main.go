@@ -69,6 +69,9 @@ func startReleasePoll(client *heroku.Service, app string) (
 
 func start(app string, dd DynoDriver,
 	release *heroku.Release, command string, argv []string, cl *heroku.Service, concurrency int) {
+	stopParallel()
+	executors = nil
+
 	config, err := cl.ConfigVarInfo(app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
@@ -199,9 +202,7 @@ func main() {
 			start(*appName, dynoDriver, release, args[0], args[1:], cl, *concurrency)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
-			if executors != nil {
-				stopParallel()
-			}
+			stopParallel()
 			os.Exit(1)
 		}
 	}
@@ -215,6 +216,10 @@ func startParallel() {
 
 // Docker containers shut down slowly, so parallelize this operation
 func stopParallel() {
+	if executors == nil {
+		return
+	}
+
 	chans := make([]chan bool, len(executors))
 	for i, executor := range executors {
 		chans[i] = make(chan bool)
