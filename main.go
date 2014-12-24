@@ -220,12 +220,12 @@ func stopParallel() {
 		return
 	}
 
-	chans := make([]chan bool, len(executors))
+	chans := make([]chan struct{}, len(executors))
 	for i, executor := range executors {
-		chans[i] = make(chan bool)
-		go func(executor *Executor, stopChan chan bool) {
+		chans[i] = make(chan struct{})
+		go func(executor *Executor, stopChan chan struct{}) {
 			executor.Stop()
-			stopChan <- true
+			stopChan <- struct{}{}
 		}(executor, chans[i])
 	}
 
