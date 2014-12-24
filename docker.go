@@ -13,7 +13,7 @@ import (
 
 type StackImage struct {
 	stack string
-	img   docker.APIImages
+	image docker.APIImages
 }
 
 type Docker struct {
@@ -45,15 +45,15 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 		stack: stack,
 	}
 
-	imgs, err := d.c.ListImages(docker.ListImagesOptions{All: true})
+	images, err := d.c.ListImages(docker.ListImagesOptions{All: true})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, img := range imgs {
-		for _, tag := range img.RepoTags {
+	for _, image := range images {
+		for _, tag := range image.RepoTags {
 			if tag == stack {
-				si.img = img
+				si.image = image
 				return &si, nil
 			}
 		}
@@ -72,7 +72,7 @@ RUN rm -rf /app
 RUN curl '%s' -o /slug.img
 RUN (unsquashfs -d /app /slug.img || (cd / && mkdir /app && tar -xzf /slug.img)) && rm -f /app/log /app/tmp && mkdir /app/log /app/tmp &&  chown -R daemon:daemon /app && chmod -R go+r /app && find /app -type d | xargs chmod go+x
 WORKDIR /app
-`, si.img.ID, slugUrl)
+`, si.image.ID, slugUrl)
 
 	log.Println(dockerContents)
 	tr.WriteHeader(&tar.Header{
