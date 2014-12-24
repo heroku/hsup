@@ -10,7 +10,7 @@ import (
 )
 
 type DockerDynoDriver struct {
-	d       *Docker
+	d *Docker
 }
 
 func (dd *DockerDynoDriver) Build(release *Release) error {
