@@ -84,7 +84,7 @@ func start(app string, dd DynoDriver,
 	release2 := &Release{
 		appName: app,
 		config:  config,
-		slugUrl: slug.Blob.URL,
+		slugURL: slug.Blob.URL,
 		version: release.Version,
 	}
 	err = dd.Build(release2)

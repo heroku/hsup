@@ -63,7 +63,7 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 }
 
 func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error) {
-	slugUrl := release.slugUrl
+	slugURL := release.slugURL
 	t := time.Now()
 	inputBuf, outputBuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 	tr := tar.NewWriter(inputBuf)
@@ -72,7 +72,7 @@ RUN rm -rf /app
 RUN curl '%s' -o /slug.img
 RUN (unsquashfs -d /app /slug.img || (cd / && mkdir /app && tar -xzf /slug.img)) && rm -f /app/log /app/tmp && mkdir /app/log /app/tmp &&  chown -R daemon:daemon /app && chmod -R go+r /app && find /app -type d | xargs chmod go+x
 WORKDIR /app
-`, si.image.ID, slugUrl)
+`, si.image.ID, slugURL)
 
 	log.Println(dockerContents)
 	tr.WriteHeader(&tar.Header{
