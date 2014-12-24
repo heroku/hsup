@@ -9,8 +9,8 @@ import (
 )
 
 type DockerDynoDriver struct {
-	d     *Docker
-	waiting          chan error
+	d       *Docker
+	waiting chan error
 }
 
 func (dd *DockerDynoDriver) Build(release *Release) error {
@@ -48,7 +48,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 
 	for i := 0; i < ex.quantity; i++ {
 		container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
-			Name: fmt.Sprintf("%v-%v", ex.Name(), i + 1),
+			Name: fmt.Sprintf("%v-%v", ex.Name(), i+1),
 			Config: &docker.Config{
 				Cmd:   ex.Args(),
 				Env:   env,

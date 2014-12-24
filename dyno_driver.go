@@ -10,7 +10,7 @@ import (
 
 type Release struct {
 	appName string
-	config map[string]string
+	config  map[string]string
 	slugUrl string
 	version int
 
@@ -23,12 +23,12 @@ func (r *Release) Name() string {
 }
 
 type Executor struct {
-	argv      []string
+	argv       []string
 	dynoDriver DynoDriver
-	formation *heroku.Formation
-	quantity  int
-	release  *Release
-	state DynoState
+	formation  *heroku.Formation
+	quantity   int
+	release    *Release
+	state      DynoState
 
 	// docker dyno driver properties
 	containers []*docker.Container

@@ -107,23 +107,23 @@ func start(app string, dd DynoDriver,
 		for _, formation := range formations {
 			executor := &Executor{
 				dynoDriver: dd,
-				formation: formation,
-				quantity: formation.Quantity,
-				release: release2,
+				formation:  formation,
+				quantity:   formation.Quantity,
+				release:    release2,
 			}
 			executors = append(executors, executor)
 		}
 	} else {
 		executor := &Executor{
-			argv: argv,
+			argv:       argv,
 			dynoDriver: dd,
-			quantity: 1,
-				release: release2,
+			quantity:   1,
+			release:    release2,
 		}
 		executors = []*Executor{executor}
 	}
 
-	for _, executor := range(executors) {
+	for _, executor := range executors {
 		executor.Start()
 	}
 }
@@ -169,7 +169,7 @@ func main() {
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
 			if executors != nil {
-				for _, executor := range(executors) {
+				for _, executor := range executors {
 					executor.Stop()
 				}
 			}
