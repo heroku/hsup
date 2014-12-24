@@ -212,7 +212,7 @@ func stopParallel() {
 		}(executor, chans[i])
 	}
 
-	for _, stopChan := range(chans) {
-		<- stopChan
+	for _, stopChan := range chans {
+		<-stopChan
 	}
 }
