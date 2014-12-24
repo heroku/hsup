@@ -11,7 +11,6 @@ import (
 
 type DockerDynoDriver struct {
 	d       *Docker
-	waiting chan error
 }
 
 func (dd *DockerDynoDriver) Build(release *Release) error {
