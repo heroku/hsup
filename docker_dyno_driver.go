@@ -39,7 +39,7 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 
 func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	// Fill environment vector from Heroku configuration.
-	env := make([]string, 0)
+	var env []string
 	for k, v := range ex.release.config {
 		env = append(env, k+"="+v)
 	}
