@@ -69,7 +69,6 @@ func startReleasePoll(client *heroku.Service, app string) (
 
 func start(app string, dd DynoDriver,
 	release *heroku.Release, command string, argv []string, cl *heroku.Service, concurrency int) {
-	stopParallel()
 	executors = nil
 
 	config, err := cl.ConfigVarInfo(app)
@@ -199,6 +198,7 @@ func main() {
 	for {
 		select {
 		case release := <-out:
+			stopParallel()
 			start(*appName, dynoDriver, release, args[0], args[1:], cl, *concurrency)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
