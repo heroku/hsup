@@ -141,9 +141,9 @@ func start(app string, dd DynoDriver,
 func getConcurrency(concurrency int, defaultConcurrency int) int {
 	if concurrency == -1 {
 		return defaultConcurrency
-	} else {
-		return concurrency
 	}
+
+	return concurrency
 }
 
 func main() {
