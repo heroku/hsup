@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -76,7 +77,16 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	return nil
 }
 
+func (dd *DockerDynoDriver) Wait(ex *Executor) error {
+	_, err := dd.d.c.WaitContainer(ex.container.ID)
+	return err
+}
+
 func (dd *DockerDynoDriver) Stop(ex *Executor) error {
+	log.Println("Stopping container for", ex.Name())
+	dd.d.c.KillContainer(docker.KillContainerOptions{
+		ID:     ex.container.ID,
+		Signal: docker.Signal(syscall.SIGTERM)})
 	return dd.d.c.StopContainer(ex.container.ID, 10)
 }
 

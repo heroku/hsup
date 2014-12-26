@@ -118,7 +118,11 @@ func start(app string, dd DynoDriver,
 					processID:   strconv.Itoa(i + 1),
 					processType: formation.Type,
 					release:     release2,
+					complete:    make(chan struct{}),
+					state:       Stopped,
+					needTick:    make(chan DynoState),
 				}
+				log.Println("Adding executor", executor)
 				executors = append(executors, executor)
 			}
 		}
@@ -130,6 +134,9 @@ func start(app string, dd DynoDriver,
 				processID:   strconv.Itoa(i + 1),
 				processType: "run",
 				release:     release2,
+				complete:    make(chan struct{}),
+				state:       Stopped,
+				needTick:    make(chan DynoState),
 			}
 			executors = append(executors, executor)
 		}
@@ -208,13 +215,22 @@ func main() {
 }
 
 func startParallel() {
-	for _, executor := range executors {
-		go executor.Start()
+	log.Println("Starting", executors)
+	for i, _ := range executors {
+		go func(executor *Executor) {
+			go executor.Trigger(Started)
+			log.Println("Beginning Tickloop for", executor.Name())
+			for executor.Tick() != ExecutorComplete {
+			}
+			close(executor.complete)
+			log.Println("Executor completes", executor.Name())
+		}(executors[i])
 	}
 }
 
 // Docker containers shut down slowly, so parallelize this operation
 func stopParallel() {
+	log.Println("stopping everything")
 	if executors == nil {
 		return
 	}
@@ -223,12 +239,13 @@ func stopParallel() {
 	for i, executor := range executors {
 		chans[i] = make(chan struct{})
 		go func(executor *Executor, stopChan chan struct{}) {
-			executor.Stop()
-			stopChan <- struct{}{}
+			log.Println("Teaching", executor.Name(),
+				"retirement goal")
+			go executor.Trigger(Retired)
 		}(executor, chans[i])
 	}
 
-	for _, stopChan := range chans {
-		<-stopChan
+	for _, executor := range executors {
+		<-executor.complete
 	}
 }

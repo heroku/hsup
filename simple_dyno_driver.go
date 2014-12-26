@@ -9,8 +9,6 @@ import (
 )
 
 type SimpleDynoDriver struct {
-	cmd     *exec.Cmd
-	waiting chan error
 }
 
 func (dd *SimpleDynoDriver) Build(release *Release) error {
@@ -18,37 +16,36 @@ func (dd *SimpleDynoDriver) Build(release *Release) error {
 }
 
 func (dd *SimpleDynoDriver) Start(ex *Executor) error {
-	dd.cmd = exec.Command(ex.argv[0], ex.argv[1:]...)
+	ex.cmd = exec.Command(ex.argv[0], ex.argv[1:]...)
 
-	dd.cmd.Stdin = os.Stdin
-	dd.cmd.Stdout = os.Stdout
-	dd.cmd.Stderr = os.Stderr
+	ex.cmd.Stdin = os.Stdin
+	ex.cmd.Stdout = os.Stdout
+	ex.cmd.Stderr = os.Stderr
 
 	// Fill environment vector from Heroku configuration.
 	for k, v := range ex.release.config {
-		dd.cmd.Env = append(dd.cmd.Env, k+"="+v)
+		ex.cmd.Env = append(ex.cmd.Env, k+"="+v)
 	}
 
-	dd.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	ex.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	err := dd.cmd.Start()
+	err := ex.cmd.Start()
 	if err != nil {
 		return err
 	}
 
-	dd.waiting = make(chan error)
-
-	go func() {
-		log.Println("wait start")
-		dd.waiting <- dd.cmd.Wait()
-		log.Println("wait complete")
-	}()
-
+	ex.waiting = make(chan struct{})
 	return nil
 }
 
+func (dd *SimpleDynoDriver) Wait(ex *Executor) error {
+	err := ex.cmd.Wait()
+	ex.waiting <- struct{}{}
+	return err
+}
+
 func (dd *SimpleDynoDriver) Stop(ex *Executor) error {
-	p := dd.cmd.Process
+	p := ex.cmd.Process
 
 	group, err := os.FindProcess(-1 * p.Pid)
 	if err != nil {
@@ -63,9 +60,9 @@ func (dd *SimpleDynoDriver) Stop(ex *Executor) error {
 		case <-time.After(10 * time.Second):
 			log.Println("sigkill", group)
 			group.Signal(syscall.SIGKILL)
-		case err := <-dd.waiting:
+		case <-ex.waiting:
 			log.Println("waited", group)
-			return err
+			return nil
 		}
 		log.Println("spin", group)
 		time.Sleep(1)
