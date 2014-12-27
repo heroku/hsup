@@ -5,20 +5,26 @@ import (
 	"log"
 	"os/exec"
 
+	"fmt"
 	"github.com/fsouza/go-dockerclient"
 )
 
 type DynoState int
 
 const (
-	// Pseudo-states used for goal-state communication.
-	NonState DynoState = iota
-	Restarting
-
-	Stopped
+	Stopped = iota
 	Started
 	Retiring
 	Retired
+)
+
+type DynoInput int
+
+const (
+	Retire = iota
+	Restart
+	Exited
+	StayStarted
 )
 
 var ExecutorComplete = errors.New("Executor complete")
@@ -40,47 +46,43 @@ type Executor struct {
 
 	// FSM Fields
 	state    DynoState
-	lastGoal DynoState
-	needTick chan DynoState
+	newInput chan DynoInput
 }
 
-func (e *Executor) Trigger(goal DynoState) {
-	log.Println("triggering", goal)
+func (e *Executor) Trigger(input DynoInput) {
+	log.Println("triggering", input)
 	select {
-	case e.needTick <- goal:
+	case e.newInput <- input:
 	case <-e.complete:
 	}
 }
 
+func (e *Executor) wait() {
+	e.dynoDriver.Wait(e)
+	e.Trigger(Exited)
+}
+
 func (e *Executor) Tick() (err error) {
-	log.Println(e.Name(), "waiting for tick...", e.state, e.lastGoal)
-	if goal := <-e.needTick; goal != NonState {
-		e.lastGoal = goal
-		log.Println(e.Name(), "ticking...", e.state, e.lastGoal)
-	}
+	log.Println(e.Name(), "waiting for tick...", e.state)
+	input := <-e.newInput
+	log.Println(e.Name(), "ticking with input", input)
 
 	start := func() error {
 		log.Printf("%v: starting\n", e.Name())
 		if err = e.dynoDriver.Start(e); err != nil {
 			log.Printf("%v: start fails: %v", e.Name(), err)
-			go e.Trigger(Restarting)
+			go e.Trigger(Restart)
 			return err
 		}
 
 		log.Printf("%v: started\n", e.Name())
 		e.state = Started
-		e.lastGoal = NonState
-
-		go func() {
-			e.dynoDriver.Wait(e)
-			e.Trigger(Restarting)
-		}()
-
+		go e.wait()
 		return nil
 	}
 
-	s := e.state
-	switch s {
+again:
+	switch e.state {
 	case Retired:
 		return ExecutorComplete
 	case Retiring:
@@ -89,38 +91,39 @@ func (e *Executor) Tick() (err error) {
 		}
 
 		e.state = Retired
-
-		return ExecutorComplete
+		goto again
 	case Stopped:
-		switch e.lastGoal {
-		case Retired:
+		switch input {
+		case Retire:
 			e.state = Retired
-			go e.Trigger(NonState)
-			return nil
-		case Started:
+			goto again
+		case Exited:
+			return start()
+		case StayStarted:
 			fallthrough
-		case Restarting:
+		case Restart:
 			return start()
 		default:
-			panic("Invalid goal state")
+			panic(fmt.Sprintln("Invalid input", input))
 		}
 	case Started:
-		switch e.lastGoal {
-		case Retired:
+		switch input {
+		case Retire:
 			e.state = Retiring
-			go e.Trigger(NonState)
-			return nil
-		case Restarting:
+			goto again
+		case Exited:
 			e.state = Stopped
-			go e.Trigger(NonState)
-			return nil
-		case Started:
-			return nil
+			goto again
+		case Restart:
+			if err = e.dynoDriver.Stop(e); err != nil {
+				return err
+			}
+			goto again
 		default:
-			panic("Invalid goal state")
+			panic(fmt.Sprintln("Invalid input", input))
 		}
 	default:
-		panic("Invalid state")
+		panic(fmt.Sprintln("Invalid state", e.state))
 	}
 }
 

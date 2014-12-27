@@ -120,7 +120,7 @@ func start(app string, dd DynoDriver,
 					release:     release2,
 					complete:    make(chan struct{}),
 					state:       Stopped,
-					needTick:    make(chan DynoState),
+					newInput:    make(chan DynoInput),
 				}
 				log.Println("Adding executor", executor)
 				executors = append(executors, executor)
@@ -136,7 +136,7 @@ func start(app string, dd DynoDriver,
 				release:     release2,
 				complete:    make(chan struct{}),
 				state:       Stopped,
-				needTick:    make(chan DynoState),
+				newInput:    make(chan DynoInput),
 			}
 			executors = append(executors, executor)
 		}
@@ -218,7 +218,7 @@ func startParallel() {
 	log.Println("Starting", executors)
 	for i, _ := range executors {
 		go func(executor *Executor) {
-			go executor.Trigger(Started)
+			go executor.Trigger(StayStarted)
 			log.Println("Beginning Tickloop for", executor.Name())
 			for executor.Tick() != ExecutorComplete {
 			}
@@ -241,7 +241,7 @@ func stopParallel() {
 		go func(executor *Executor, stopChan chan struct{}) {
 			log.Println("Teaching", executor.Name(),
 				"retirement goal")
-			go executor.Trigger(Retired)
+			go executor.Trigger(Retire)
 		}(executor, chans[i])
 	}
 
