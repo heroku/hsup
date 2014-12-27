@@ -5,10 +5,26 @@ a process with arguments.
 
 Usage:
 
-    HEROKU_ACCESS_TOKEN=... hsup [app] [executable] [args ...]
+``` sh
+hsup COMMAND [options]
+```
+
+Where `COMMAND` is on one:
+
+* `run`: Run a command with an app's environment.
+* `start`: Start a process type as defined in an app's `Procfile`.
 
 Example:
 
-    export DOCKER_HOST=unix:///var/run/docker.sock
-    export HEROKU_ACCESS_TOKEN=...
-    go build && ./hsup -dynodriver docker simple-brandur bash -c 'while true; do echo "hello" ; sleep 5 ; done'
+``` sh
+go build
+
+export DOCKER_HOST=unix:///var/run/docker.sock
+export HEROKU_ACCESS_TOKEN=...
+
+# start default process types inside Docker
+hsup start -d docker -c 2 -a simple-brandur
+
+# run command as subprocess
+hsup run -d simple -c 2 -a simple-brandur echo "hello"
+```
