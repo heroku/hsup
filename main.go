@@ -220,7 +220,7 @@ func startParallel() {
 		go func(executor *Executor) {
 			go executor.Trigger(StayStarted)
 			log.Println("Beginning Tickloop for", executor.Name())
-			for executor.Tick() != ExecutorComplete {
+			for executor.Tick() != ErrExecutorComplete {
 			}
 			log.Println("Executor completes", executor.Name())
 		}(executors[i])

@@ -27,7 +27,7 @@ const (
 	StayStarted
 )
 
-var ExecutorComplete = errors.New("Executor complete")
+var ErrExecutorComplete = errors.New("Executor complete")
 
 type Executor struct {
 	argv        []string
@@ -86,7 +86,7 @@ again:
 	switch e.state {
 	case Retired:
 		close(e.complete)
-		return ExecutorComplete
+		return ErrExecutorComplete
 	case Retiring:
 		if err = e.dynoDriver.Stop(e); err != nil {
 			return err
