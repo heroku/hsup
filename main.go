@@ -122,7 +122,6 @@ func start(app string, dd DynoDriver,
 					state:       Stopped,
 					newInput:    make(chan DynoInput),
 				}
-				log.Println("Adding executor", executor)
 				executors = append(executors, executor)
 			}
 		}
@@ -239,8 +238,6 @@ func stopParallel() {
 	for i, executor := range executors {
 		chans[i] = make(chan struct{})
 		go func(executor *Executor, stopChan chan struct{}) {
-			log.Println("Teaching", executor.Name(),
-				"retirement goal")
 			go executor.Trigger(Retire)
 		}(executor, chans[i])
 	}
