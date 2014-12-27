@@ -216,7 +216,7 @@ func main() {
 
 func startParallel() {
 	log.Println("Starting", executors)
-	for i, _ := range executors {
+	for i := range executors {
 		go func(executor *Executor) {
 			go executor.Trigger(StayStarted)
 			log.Println("Beginning Tickloop for", executor.Name())
