@@ -85,6 +85,7 @@ func (e *Executor) Tick() (err error) {
 again:
 	switch e.state {
 	case Retired:
+		close(e.complete)
 		return ExecutorComplete
 	case Retiring:
 		if err = e.dynoDriver.Stop(e); err != nil {

@@ -222,7 +222,6 @@ func startParallel() {
 			log.Println("Beginning Tickloop for", executor.Name())
 			for executor.Tick() != ExecutorComplete {
 			}
-			close(executor.complete)
 			log.Println("Executor completes", executor.Name())
 		}(executors[i])
 	}
