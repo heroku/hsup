@@ -45,6 +45,7 @@ type Executor struct {
 	container *docker.Container
 
 	// FSM Fields
+	OneShot  bool
 	state    DynoState
 	newInput chan DynoInput
 }
@@ -98,6 +99,11 @@ again:
 			e.state = Retired
 			goto again
 		case Exited:
+			if e.OneShot {
+				e.state = Retired
+				goto again
+			}
+
 			return start()
 		case StayStarted:
 			fallthrough

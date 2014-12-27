@@ -135,6 +135,7 @@ func start(app string, dd DynoDriver,
 				release:     release2,
 				complete:    make(chan struct{}),
 				state:       Stopped,
+				OneShot:     true,
 				newInput:    make(chan DynoInput),
 			}
 			executors = append(executors, executor)
