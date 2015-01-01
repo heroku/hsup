@@ -13,11 +13,25 @@ import (
 	flag "github.com/ogier/pflag"
 )
 
-var executors []*Executor
+type Processes struct {
+	app        string
+	cl         *heroku.Service
+	dd         DynoDriver
+	formations []*Formation
+}
 
-func fetchLatestRelease(client *heroku.Service, app string) (*heroku.Release, error) {
-	releases, err := client.ReleaseList(
-		app, &heroku.ListRange{Descending: true, Field: "version", Max: 1})
+type Formation struct {
+	release     *heroku.Release
+	config      map[string]string
+	concurrency int
+	argv        []string
+	executors   []*Executor
+}
+
+func (p *Processes) fetchLatestRelease() (*heroku.Release, error) {
+	releases, err := p.cl.ReleaseList(
+		p.app, &heroku.ListRange{Descending: true, Field: "version",
+			Max: 1})
 	if err != nil {
 		return nil, err
 	}
@@ -32,13 +46,13 @@ func fetchLatestRelease(client *heroku.Service, app string) (*heroku.Release, er
 // Listens for new releases by periodically polling the Heroku
 // API. When a new release is detected it is sent to the returned
 // channel.
-func startReleasePoll(client *heroku.Service, app string) (
+func (p *Processes) startReleasePoll() (
 	out <-chan *heroku.Release) {
 	lastReleaseID := ""
 	releaseChannel := make(chan *heroku.Release)
 	go func() {
 		for {
-			release, err := fetchLatestRelease(client, app)
+			release, err := p.fetchLatestRelease()
 			if err != nil {
 				log.Printf("Error getting releases: %s\n",
 					err.Error())
@@ -67,27 +81,37 @@ func startReleasePoll(client *heroku.Service, app string) (
 	return releaseChannel
 }
 
-func start(app string, dd DynoDriver,
-	release *heroku.Release, command string, argv []string, cl *heroku.Service, concurrency int) {
-	executors = nil
+func (p *Processes) addFormation(release *heroku.Release,
+	argv []string, config map[string]string, concurrency int) *Formation {
+	f := &Formation{
+		release:     release,
+		config:      config,
+		concurrency: concurrency,
+		argv:        argv,
+	}
+	p.formations = append(p.formations, f)
+	return f
+}
 
-	config, err := cl.ConfigVarInfo(app)
+func (p *Processes) start(release *heroku.Release, command string,
+	argv []string, concurrency int) {
+	config, err := p.cl.ConfigVarInfo(p.app)
 	if err != nil {
 		log.Fatal("hsup could not get config info: " + err.Error())
 	}
 
-	slug, err := cl.SlugInfo(app, release.Slug.ID)
+	slug, err := p.cl.SlugInfo(p.app, release.Slug.ID)
 	if err != nil {
 		log.Fatal("hsup could not get slug info: " + err.Error())
 	}
 
 	release2 := &Release{
-		appName: app,
+		appName: p.app,
 		config:  config,
 		slugURL: slug.Blob.URL,
 		version: release.Version,
 	}
-	err = dd.Build(release2)
+	err = p.dd.Build(release2)
 	if err != nil {
 		log.Fatal("hsup could not bake image for release " + release2.Name() + ": " + err.Error())
 	}
@@ -95,12 +119,12 @@ func start(app string, dd DynoDriver,
 	if command == "start" {
 		var formations []*heroku.Formation
 		if len(argv) == 0 {
-			formations, err = cl.FormationList(app, &heroku.ListRange{})
+			formations, err = p.cl.FormationList(p.app, &heroku.ListRange{})
 			if err != nil {
 				log.Fatal("hsup could not get formation list: " + err.Error())
 			}
 		} else {
-			formation, err := cl.FormationInfo(app, argv[0])
+			formation, err := p.cl.FormationInfo(p.app, argv[0])
 			if err != nil {
 				log.Fatal("hsup could not get formation list: " + err.Error())
 			}
@@ -110,11 +134,12 @@ func start(app string, dd DynoDriver,
 		for _, formation := range formations {
 			log.Printf("formation quantity=%v type=%v\n",
 				formation.Quantity, formation.Type)
+			f := p.addFormation(release, argv, config, concurrency)
 
 			for i := 0; i < getConcurrency(concurrency, formation.Quantity); i++ {
 				executor := &Executor{
 					argv:        []string{formation.Command},
-					dynoDriver:  dd,
+					dynoDriver:  p.dd,
 					processID:   strconv.Itoa(i + 1),
 					processType: formation.Type,
 					release:     release2,
@@ -122,14 +147,17 @@ func start(app string, dd DynoDriver,
 					state:       Stopped,
 					newInput:    make(chan DynoInput),
 				}
-				executors = append(executors, executor)
+
+				f.executors = append(f.executors, executor)
 			}
 		}
 	} else if command == "run" {
+		f := p.addFormation(release, argv, config, concurrency)
+
 		for i := 0; i < getConcurrency(concurrency, 1); i++ {
 			executor := &Executor{
 				argv:        argv,
-				dynoDriver:  dd,
+				dynoDriver:  p.dd,
 				processID:   strconv.Itoa(i + 1),
 				processType: "run",
 				release:     release2,
@@ -138,11 +166,11 @@ func start(app string, dd DynoDriver,
 				OneShot:     true,
 				newInput:    make(chan DynoInput),
 			}
-			executors = append(executors, executor)
+			f.executors = append(f.executors, executor)
 		}
 	}
 
-	startParallel()
+	p.startParallel()
 }
 
 func getConcurrency(concurrency int, defaultConcurrency int) int {
@@ -197,52 +225,59 @@ func main() {
 		log.Fatalln("could not find dyno driver:", *dynoDriverName)
 	}
 
-	out := startReleasePoll(cl, *appName)
+	p := Processes{
+		app: *appName,
+		cl:  cl,
+		dd:  dynoDriver,
+	}
+
+	out := p.startReleasePoll()
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
 	for {
 		select {
 		case release := <-out:
-			stopParallel()
-			start(*appName, dynoDriver, release, args[0], args[1:], cl, *concurrency)
+			p.stopParallel()
+			p.start(release, args[0], args[1:], *concurrency)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
-			stopParallel()
+			p.stopParallel()
 			os.Exit(1)
 		}
 	}
 }
 
-func startParallel() {
-	log.Println("Starting", executors)
-	for i := range executors {
-		go func(executor *Executor) {
-			go executor.Trigger(StayStarted)
-			log.Println("Beginning Tickloop for", executor.Name())
-			for executor.Tick() != ErrExecutorComplete {
-			}
-			log.Println("Executor completes", executor.Name())
-		}(executors[i])
+func (p *Processes) startParallel() {
+	for _, formation := range p.formations {
+		for _, executor := range formation.executors {
+			go func(executor *Executor) {
+				go executor.Trigger(StayStarted)
+				log.Println("Beginning Tickloop for", executor.Name())
+				for executor.Tick() != ErrExecutorComplete {
+				}
+				log.Println("Executor completes", executor.Name())
+			}(executor)
+		}
 	}
 }
 
 // Docker containers shut down slowly, so parallelize this operation
-func stopParallel() {
+func (p *Processes) stopParallel() {
 	log.Println("stopping everything")
-	if executors == nil {
-		return
+
+	for _, formation := range p.formations {
+		for _, executor := range formation.executors {
+			go func(executor *Executor) {
+				go executor.Trigger(Retire)
+			}(executor)
+		}
 	}
 
-	chans := make([]chan struct{}, len(executors))
-	for i, executor := range executors {
-		chans[i] = make(chan struct{})
-		go func(executor *Executor, stopChan chan struct{}) {
-			go executor.Trigger(Retire)
-		}(executor, chans[i])
+	for _, formation := range p.formations {
+		for _, executor := range formation.executors {
+			<-executor.complete
+		}
 	}
 
-	for _, executor := range executors {
-		<-executor.complete
-	}
 }
