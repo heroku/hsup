@@ -14,16 +14,32 @@ import (
 )
 
 type Processes struct {
-	app        string
-	cl         *heroku.Service
-	dd         DynoDriver
-	formations []*Formation
+	cl *heroku.Service
+
+	app       string
+	dd        DynoDriver
+	executors []*Executor
 }
 
-type Formation struct {
-	concurrency int
-	argv        []string
-	executors   []*Executor
+type Formation interface {
+	Argv() []string
+	Quantity() int
+	Type() string
+}
+
+type ApiFormation struct {
+	h *heroku.Formation
+}
+
+func (f *ApiFormation) Argv() []string {
+	return []string{f.h.Command}
+}
+func (f *ApiFormation) Quantity() int {
+	return f.h.Quantity
+}
+
+func (f *ApiFormation) Type() string {
+	return f.h.Type
 }
 
 func (p *Processes) fetchLatestRelease() (*heroku.Release, error) {
@@ -79,16 +95,6 @@ func (p *Processes) startReleasePoll() (
 	return releaseChannel
 }
 
-func (p *Processes) addFormation(release *heroku.Release, argv []string,
-	concurrency int) *Formation {
-	f := &Formation{
-		concurrency: concurrency,
-		argv:        argv,
-	}
-	p.formations = append(p.formations, f)
-	return f
-}
-
 func (p *Processes) start(release *heroku.Release, command string,
 	argv []string, concurrency int) {
 	config, err := p.cl.ConfigVarInfo(p.app)
@@ -113,43 +119,45 @@ func (p *Processes) start(release *heroku.Release, command string,
 	}
 
 	if command == "start" {
-		var formations []*heroku.Formation
+		var formations []Formation
 		if len(argv) == 0 {
-			formations, err = p.cl.FormationList(p.app, &heroku.ListRange{})
+			hForms, err := p.cl.FormationList(p.app, &heroku.ListRange{})
 			if err != nil {
 				log.Fatal("hsup could not get formation list: " + err.Error())
+			}
+
+			for _, hForm := range hForms {
+				formations = append(formations, &ApiFormation{h: hForm})
 			}
 		} else {
-			formation, err := p.cl.FormationInfo(p.app, argv[0])
+			hForm, err := p.cl.FormationInfo(p.app, argv[0])
 			if err != nil {
 				log.Fatal("hsup could not get formation list: " + err.Error())
 			}
-			formations = []*heroku.Formation{formation}
+
+			formations = append(formations, &ApiFormation{h: hForm})
 		}
 
 		for _, formation := range formations {
 			log.Printf("formation quantity=%v type=%v\n",
 				formation.Quantity, formation.Type)
-			f := p.addFormation(release, argv, concurrency)
 
-			for i := 0; i < getConcurrency(concurrency, formation.Quantity); i++ {
+			for i := 0; i < getConcurrency(concurrency, formation.Quantity()); i++ {
 				executor := &Executor{
-					argv:        []string{formation.Command},
+					argv:        formation.Argv(),
 					dynoDriver:  p.dd,
 					processID:   strconv.Itoa(i + 1),
-					processType: formation.Type,
+					processType: formation.Type(),
 					release:     release2,
 					complete:    make(chan struct{}),
 					state:       Stopped,
 					newInput:    make(chan DynoInput),
 				}
 
-				f.executors = append(f.executors, executor)
+				p.executors = append(p.executors, executor)
 			}
 		}
 	} else if command == "run" {
-		f := p.addFormation(release, argv, concurrency)
-
 		for i := 0; i < getConcurrency(concurrency, 1); i++ {
 			executor := &Executor{
 				argv:        argv,
@@ -162,7 +170,7 @@ func (p *Processes) start(release *heroku.Release, command string,
 				OneShot:     true,
 				newInput:    make(chan DynoInput),
 			}
-			f.executors = append(f.executors, executor)
+			p.executors = append(p.executors, executor)
 		}
 	}
 
@@ -245,16 +253,14 @@ func main() {
 }
 
 func (p *Processes) startParallel() {
-	for _, formation := range p.formations {
-		for _, executor := range formation.executors {
-			go func(executor *Executor) {
-				go executor.Trigger(StayStarted)
-				log.Println("Beginning Tickloop for", executor.Name())
-				for executor.Tick() != ErrExecutorComplete {
-				}
-				log.Println("Executor completes", executor.Name())
-			}(executor)
-		}
+	for _, executor := range p.executors {
+		go func(executor *Executor) {
+			go executor.Trigger(StayStarted)
+			log.Println("Beginning Tickloop for", executor.Name())
+			for executor.Tick() != ErrExecutorComplete {
+			}
+			log.Println("Executor completes", executor.Name())
+		}(executor)
 	}
 }
 
@@ -262,18 +268,13 @@ func (p *Processes) startParallel() {
 func (p *Processes) stopParallel() {
 	log.Println("stopping everything")
 
-	for _, formation := range p.formations {
-		for _, executor := range formation.executors {
-			go func(executor *Executor) {
-				go executor.Trigger(Retire)
-			}(executor)
-		}
+	for _, executor := range p.executors {
+		go func(executor *Executor) {
+			go executor.Trigger(Retire)
+		}(executor)
 	}
 
-	for _, formation := range p.formations {
-		for _, executor := range formation.executors {
-			<-executor.complete
-		}
+	for _, executor := range p.executors {
+		<-executor.complete
 	}
-
 }
