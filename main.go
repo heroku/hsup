@@ -21,7 +21,6 @@ type Processes struct {
 }
 
 type Formation struct {
-	config      map[string]string
 	concurrency int
 	argv        []string
 	executors   []*Executor
@@ -80,10 +79,9 @@ func (p *Processes) startReleasePoll() (
 	return releaseChannel
 }
 
-func (p *Processes) addFormation(release *heroku.Release,
-	argv []string, config map[string]string, concurrency int) *Formation {
+func (p *Processes) addFormation(release *heroku.Release, argv []string,
+	concurrency int) *Formation {
 	f := &Formation{
-		config:      config,
 		concurrency: concurrency,
 		argv:        argv,
 	}
@@ -132,7 +130,7 @@ func (p *Processes) start(release *heroku.Release, command string,
 		for _, formation := range formations {
 			log.Printf("formation quantity=%v type=%v\n",
 				formation.Quantity, formation.Type)
-			f := p.addFormation(release, argv, config, concurrency)
+			f := p.addFormation(release, argv, concurrency)
 
 			for i := 0; i < getConcurrency(concurrency, formation.Quantity); i++ {
 				executor := &Executor{
@@ -150,7 +148,7 @@ func (p *Processes) start(release *heroku.Release, command string,
 			}
 		}
 	} else if command == "run" {
-		f := p.addFormation(release, argv, config, concurrency)
+		f := p.addFormation(release, argv, concurrency)
 
 		for i := 0; i < getConcurrency(concurrency, 1); i++ {
 			executor := &Executor{
