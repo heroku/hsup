@@ -21,7 +21,6 @@ type Processes struct {
 }
 
 type Formation struct {
-	release     *heroku.Release
 	config      map[string]string
 	concurrency int
 	argv        []string
@@ -84,7 +83,6 @@ func (p *Processes) startReleasePoll() (
 func (p *Processes) addFormation(release *heroku.Release,
 	argv []string, config map[string]string, concurrency int) *Formation {
 	f := &Formation{
-		release:     release,
 		config:      config,
 		concurrency: concurrency,
 		argv:        argv,
