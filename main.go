@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"github.com/cyberdelia/heroku-go/v3"
 	flag "github.com/ogier/pflag"
 )
+
+var ErrNoReleases = errors.New("No releases found")
 
 type Processes struct {
 	cl *heroku.Service
@@ -51,7 +54,7 @@ func (p *Processes) fetchLatestRelease() (*heroku.Release, error) {
 	}
 
 	if len(releases) < 1 {
-		return nil, nil
+		return nil, ErrNoReleases
 	}
 
 	return releases[0], nil
