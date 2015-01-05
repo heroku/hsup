@@ -16,10 +16,18 @@ import (
 
 var ErrNoReleases = errors.New("No releases found")
 
-type Processes struct {
-	cl *heroku.Service
+type ApiPoller struct {
+	Cl  *heroku.Service
+	App string
+	Dd  DynoDriver
 
-	app       string
+	lastReleaseID string
+}
+
+type Processes struct {
+	r     *Release
+	forms []Formation
+
 	dd        DynoDriver
 	executors []*Executor
 }
@@ -45,9 +53,9 @@ func (f *ApiFormation) Type() string {
 	return f.h.Type
 }
 
-func (p *Processes) fetchLatestRelease() (*heroku.Release, error) {
-	releases, err := p.cl.ReleaseList(
-		p.app, &heroku.ListRange{Descending: true, Field: "version",
+func (ap *ApiPoller) fetchLatest() (*heroku.Release, error) {
+	releases, err := ap.Cl.ReleaseList(
+		ap.App, &heroku.ListRange{Descending: true, Field: "version",
 			Max: 1})
 	if err != nil {
 		return nil, err
@@ -60,98 +68,105 @@ func (p *Processes) fetchLatestRelease() (*heroku.Release, error) {
 	return releases[0], nil
 }
 
+func (ap *ApiPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
+	config, err := ap.Cl.ConfigVarInfo(ap.App)
+	if err != nil {
+		return nil, err
+	}
+
+	slug, err := ap.Cl.SlugInfo(ap.App, rel.Slug.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	hForms, err := ap.Cl.FormationList(ap.App, &heroku.ListRange{})
+	if err != nil {
+		return nil, err
+	}
+
+	procs := Processes{
+		r: &Release{
+			appName: ap.App,
+			config:  config,
+			slugURL: slug.Blob.URL,
+			version: rel.Version,
+		},
+		forms: make([]Formation, len(hForms), len(hForms)),
+		dd:    ap.Dd,
+	}
+
+	for i, hForm := range hForms {
+		procs.forms[i] = &ApiFormation{h: hForm}
+	}
+
+	return &procs, nil
+}
+
+func (ap *ApiPoller) pollOnce() (*Processes, error) {
+	release, err := ap.fetchLatest()
+	if err != nil {
+		return nil, err
+	}
+
+	if release != nil && ap.lastReleaseID != release.ID {
+		ap.lastReleaseID = release.ID
+
+		log.Printf("New release %s detected", ap.lastReleaseID)
+		return ap.fillProcesses(release)
+	}
+
+	return nil, nil
+}
+
+func (ap *ApiPoller) pollSynchronous(out chan<- *Processes) {
+	for {
+		procs, err := ap.pollOnce()
+		if err != nil {
+			log.Println("Could not fetch new release information:",
+				err)
+			goto wait
+		}
+
+		if procs != nil {
+			out <- procs
+		}
+
+	wait:
+		time.Sleep(10 * time.Second)
+	}
+}
+
 // Listens for new releases by periodically polling the Heroku
 // API. When a new release is detected it is sent to the returned
 // channel.
-func (p *Processes) startReleasePoll() (
-	out <-chan *heroku.Release) {
-	lastReleaseID := ""
-	releaseChannel := make(chan *heroku.Release)
-	go func() {
-		for {
-			release, err := p.fetchLatestRelease()
-			if err != nil {
-				log.Printf("Error getting releases: %s\n",
-					err.Error())
-				// with `release` remaining as `nil`, allow the function to
-				// fall through to its sleep
-			}
-
-			restartRequired := false
-			if release != nil && lastReleaseID != release.ID {
-				restartRequired = true
-				lastReleaseID = release.ID
-			}
-
-			if restartRequired {
-				log.Printf("New release %s detected", lastReleaseID)
-				// This is a blocking channel and so restarts
-				// will be throttled naturally.
-				releaseChannel <- release
-			} else {
-				log.Printf("No new releases\n")
-				<-time.After(10 * time.Second)
-			}
-		}
-	}()
-
-	return releaseChannel
+func (ap *ApiPoller) poll() <-chan *Processes {
+	out := make(chan *Processes)
+	go ap.pollSynchronous(out)
+	return out
 }
 
-func (p *Processes) start(release *heroku.Release, command string,
-	argv []string, concurrency int) {
-	config, err := p.cl.ConfigVarInfo(p.app)
+func (p *Processes) start(command string, argv []string, concurrency int) (
+	err error) {
+	err = p.dd.Build(p.r)
 	if err != nil {
-		log.Fatal("hsup could not get config info: " + err.Error())
-	}
-
-	slug, err := p.cl.SlugInfo(p.app, release.Slug.ID)
-	if err != nil {
-		log.Fatal("hsup could not get slug info: " + err.Error())
-	}
-
-	release2 := &Release{
-		appName: p.app,
-		config:  config,
-		slugURL: slug.Blob.URL,
-		version: release.Version,
-	}
-	err = p.dd.Build(release2)
-	if err != nil {
-		log.Fatal("hsup could not bake image for release " + release2.Name() + ": " + err.Error())
+		log.Printf("hsup could not bake image for release %s: %s",
+			p.r.Name(), err.Error())
+		return err
 	}
 
 	if command == "start" {
-		var formations []Formation
-		if len(argv) == 0 {
-			hForms, err := p.cl.FormationList(p.app, &heroku.ListRange{})
-			if err != nil {
-				log.Fatal("hsup could not get formation list: " + err.Error())
-			}
-
-			for _, hForm := range hForms {
-				formations = append(formations, &ApiFormation{h: hForm})
-			}
-		} else {
-			hForm, err := p.cl.FormationInfo(p.app, argv[0])
-			if err != nil {
-				log.Fatal("hsup could not get formation list: " + err.Error())
-			}
-
-			formations = append(formations, &ApiFormation{h: hForm})
-		}
-
-		for _, formation := range formations {
+		for _, form := range p.forms {
 			log.Printf("formation quantity=%v type=%v\n",
-				formation.Quantity, formation.Type)
+				form.Quantity(), form.Type())
 
-			for i := 0; i < getConcurrency(concurrency, formation.Quantity()); i++ {
+			for i := 0; i < getConcurrency(concurrency,
+				form.Quantity()); i++ {
 				executor := &Executor{
-					argv:        formation.Argv(),
+					argv:        form.Argv(),
 					dynoDriver:  p.dd,
 					processID:   strconv.Itoa(i + 1),
-					processType: formation.Type(),
-					release:     release2,
+					processType: form.Type(),
+					release:     p.r,
 					complete:    make(chan struct{}),
 					state:       Stopped,
 					newInput:    make(chan DynoInput),
@@ -167,7 +182,7 @@ func (p *Processes) start(release *heroku.Release, command string,
 				dynoDriver:  p.dd,
 				processID:   strconv.Itoa(i + 1),
 				processType: "run",
-				release:     release2,
+				release:     p.r,
 				complete:    make(chan struct{}),
 				state:       Stopped,
 				OneShot:     true,
@@ -178,6 +193,7 @@ func (p *Processes) start(release *heroku.Release, command string,
 	}
 
 	p.startParallel()
+	return nil
 }
 
 func getConcurrency(concurrency int, defaultConcurrency int) int {
@@ -232,24 +248,28 @@ func main() {
 		log.Fatalln("could not find dyno driver:", *dynoDriverName)
 	}
 
-	p := Processes{
-		app: *appName,
-		cl:  cl,
-		dd:  dynoDriver,
-	}
-
-	out := p.startReleasePoll()
+	poller := ApiPoller{Cl: cl, App: *appName, Dd: dynoDriver}
+	procs := poller.poll()
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
+	var p *Processes
 	for {
 		select {
-		case release := <-out:
-			p.stopParallel()
-			p.start(release, args[0], args[1:], *concurrency)
+		case newProcs := <-procs:
+			if p != nil {
+				p.stopParallel()
+			}
+			p = newProcs
+			err = p.start(args[0], args[1:], *concurrency)
+			if err != nil {
+				log.Fatalln("could not start process:", err)
+			}
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
-			p.stopParallel()
+			if p != nil {
+				p.stopParallel()
+			}
 			os.Exit(1)
 		}
 	}
