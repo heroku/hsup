@@ -33,7 +33,7 @@ type Processes struct {
 }
 
 type Formation interface {
-	Argv() []string
+	Args() []string
 	Quantity() int
 	Type() string
 }
@@ -42,7 +42,7 @@ type ApiFormation struct {
 	h *heroku.Formation
 }
 
-func (f *ApiFormation) Argv() []string {
+func (f *ApiFormation) Args() []string {
 	return []string{f.h.Command}
 }
 func (f *ApiFormation) Quantity() int {
@@ -145,7 +145,7 @@ func (ap *ApiPoller) poll() <-chan *Processes {
 	return out
 }
 
-func (p *Processes) start(command string, argv []string, concurrency int) (
+func (p *Processes) start(command string, args []string, concurrency int) (
 	err error) {
 	err = p.dd.Build(p.r)
 	if err != nil {
@@ -162,7 +162,7 @@ func (p *Processes) start(command string, argv []string, concurrency int) (
 			for i := 0; i < getConcurrency(concurrency,
 				form.Quantity()); i++ {
 				executor := &Executor{
-					argv:        form.Argv(),
+					args:        form.Args(),
 					dynoDriver:  p.dd,
 					processID:   strconv.Itoa(i + 1),
 					processType: form.Type(),
@@ -178,7 +178,7 @@ func (p *Processes) start(command string, argv []string, concurrency int) (
 	} else if command == "run" {
 		for i := 0; i < getConcurrency(concurrency, 1); i++ {
 			executor := &Executor{
-				argv:        argv,
+				args:        args,
 				dynoDriver:  p.dd,
 				processID:   strconv.Itoa(i + 1),
 				processType: "run",

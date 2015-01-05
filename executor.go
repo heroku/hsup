@@ -30,7 +30,7 @@ const (
 var ErrExecutorComplete = errors.New("Executor complete")
 
 type Executor struct {
-	argv        []string
+	args        []string
 	dynoDriver  DynoDriver
 	release     *Release
 	processID   string

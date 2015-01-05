@@ -51,7 +51,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: name,
 		Config: &docker.Config{
-			Cmd:   ex.argv,
+			Cmd:   ex.args,
 			Env:   env,
 			Image: ex.release.imageName,
 		},
