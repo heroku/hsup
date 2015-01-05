@@ -77,9 +77,9 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	return nil
 }
 
-func (dd *DockerDynoDriver) Wait(ex *Executor) error {
-	_, err := dd.d.c.WaitContainer(ex.container.ID)
-	return err
+func (dd *DockerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
+	code, err := dd.d.c.WaitContainer(ex.container.ID)
+	return &ExitStatus{code: code, err: err}
 }
 
 func (dd *DockerDynoDriver) Stop(ex *Executor) error {

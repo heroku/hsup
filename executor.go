@@ -35,6 +35,7 @@ type Executor struct {
 	release     *Release
 	processID   string
 	processType string
+	status      chan *ExitStatus
 	complete    chan struct{}
 
 	// simple dyno driver properties
@@ -59,7 +60,10 @@ func (e *Executor) Trigger(input DynoInput) {
 }
 
 func (e *Executor) wait() {
-	e.dynoDriver.Wait(e)
+	if s := e.dynoDriver.Wait(e); e.status != nil {
+		log.Println("Executor exits:", e.Name(), "exit code:", s.code)
+		e.status <- s
+	}
 	e.Trigger(Exited)
 }
 

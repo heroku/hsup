@@ -38,10 +38,18 @@ func (dd *SimpleDynoDriver) Start(ex *Executor) error {
 	return nil
 }
 
-func (dd *SimpleDynoDriver) Wait(ex *Executor) error {
-	err := ex.cmd.Wait()
+func (dd *SimpleDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
+	s = &ExitStatus{}
+	if s.err = ex.cmd.Wait(); s.err != nil {
+		if eErr, ok := s.err.(*exec.ExitError); ok {
+			if status, ok := eErr.Sys().(syscall.WaitStatus); ok {
+				s.code = status.ExitStatus()
+			}
+		}
+	}
+
 	ex.waiting <- struct{}{}
-	return err
+	return s
 }
 
 func (dd *SimpleDynoDriver) Stop(ex *Executor) error {

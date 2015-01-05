@@ -29,7 +29,27 @@ type Processes struct {
 	forms []Formation
 
 	dd        DynoDriver
+	OneShot   bool
 	executors []*Executor
+}
+
+func statuses(p *Processes) <-chan []*ExitStatus {
+	if p == nil || !p.OneShot {
+		return nil
+	}
+
+	out := make(chan []*ExitStatus)
+
+	go func() {
+		statuses := make([]*ExitStatus, len(p.executors))
+		for i, executor := range p.executors {
+			log.Println("Got a status")
+			statuses[i] = <-executor.status
+		}
+		out <- statuses
+	}()
+
+	return out
 }
 
 type Formation interface {
@@ -176,7 +196,9 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 			}
 		}
 	} else if command == "run" {
-		for i := 0; i < getConcurrency(concurrency, 1); i++ {
+		p.OneShot = true
+		conc := getConcurrency(concurrency, 1)
+		for i := 0; i < conc; i++ {
 			executor := &Executor{
 				args:        args,
 				dynoDriver:  p.dd,
@@ -186,6 +208,7 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 				complete:    make(chan struct{}),
 				state:       Stopped,
 				OneShot:     true,
+				status:      make(chan *ExitStatus),
 				newInput:    make(chan DynoInput),
 			}
 			p.executors = append(p.executors, executor)
@@ -265,6 +288,26 @@ func main() {
 			if err != nil {
 				log.Fatalln("could not start process:", err)
 			}
+		case statv := <-statuses(p):
+			exitVal := 0
+			for i, s := range statv {
+				eName := p.executors[i].Name()
+				if s.err != nil {
+					log.Println("could not execute", eName,
+						":", s.err)
+					if 255 > exitVal {
+						exitVal = 255
+					}
+				} else {
+					log.Println(eName, "exits with code:",
+						s.code)
+					if s.code > exitVal {
+						exitVal = s.code
+					}
+				}
+				os.Exit(exitVal)
+			}
+			os.Exit(0)
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
 			if p != nil {

@@ -8,12 +8,12 @@ type DynoDriver interface {
 	Build(*Release) error
 	Start(*Executor) error
 	Stop(*Executor) error
-	Wait(*Executor) error
+	Wait(*Executor) *ExitStatus
 }
 
-type WaitInfo struct {
-	exitCode int
-	err      error
+type ExitStatus struct {
+	code int
+	err  error
 }
 
 type Release struct {
