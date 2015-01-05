@@ -156,11 +156,11 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 
 	if command == "start" {
 		for _, form := range p.forms {
+			conc := getConcurrency(concurrency, form.Quantity())
 			log.Printf("formation quantity=%v type=%v\n",
-				form.Quantity(), form.Type())
+				conc, form.Type())
 
-			for i := 0; i < getConcurrency(concurrency,
-				form.Quantity()); i++ {
+			for i := 0; i < conc; i++ {
 				executor := &Executor{
 					args:        form.Args(),
 					dynoDriver:  p.dd,
