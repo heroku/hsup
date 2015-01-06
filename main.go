@@ -298,8 +298,8 @@ func main() {
 			for i, s := range statv {
 				eName := p.executors[i].Name()
 				if s.err != nil {
-					log.Println("could not execute", eName,
-						":", s.err)
+					log.Printf("could not execute %s: %s",
+						eName, s.err.Error())
 					if 255 > exitVal {
 						exitVal = 255
 					}
