@@ -15,6 +15,10 @@ import (
 
 var ErrNoReleases = errors.New("No releases found")
 
+type Poller interface {
+	Poll() <-chan *Processes
+}
+
 type Processes struct {
 	r     *Release
 	forms []Formation
@@ -115,14 +119,11 @@ func main() {
 	var err error
 
 	token := os.Getenv("HEROKU_ACCESS_TOKEN")
-	if token == "" {
-		log.Fatal("need HEROKU_ACCESS_TOKEN")
+	controlDir := os.Getenv("CONTROL_DIR")
+
+	if token == "" && controlDir == "" {
+		log.Fatal("need HEROKU_ACCESS_TOKEN or CONTROL_DIR")
 	}
-
-	heroku.DefaultTransport.Username = ""
-	heroku.DefaultTransport.Password = token
-
-	cl := heroku.NewService(heroku.DefaultClient)
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: %s COMMAND [OPTIONS]\n", os.Args[0])
@@ -160,7 +161,23 @@ func main() {
 		log.Fatalln("could not find dyno driver:", *dynoDriverName)
 	}
 
-	poller := ApiPoller{Cl: cl, App: *appName, Dd: dynoDriver}
+	var poller Poller
+	switch {
+	case token != "":
+		heroku.DefaultTransport.Username = ""
+		heroku.DefaultTransport.Password = token
+		cl := heroku.NewService(heroku.DefaultClient)
+		poller = &ApiPoller{Cl: cl, App: *appName, Dd: dynoDriver}
+	case controlDir != "":
+		poller = &DirPoller{
+			Dd:      dynoDriver,
+			Dir:     controlDir,
+			AppName: *appName,
+		}
+	default:
+		panic("one of token or watch dir ought to have been defined")
+	}
+
 	procs := poller.Poll()
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
