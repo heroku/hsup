@@ -12,7 +12,7 @@ import (
 type DynoState int
 
 const (
-	Stopped = iota
+	Stopped DynoState = iota
 	Started
 	Retiring
 	Retired
@@ -21,7 +21,7 @@ const (
 type DynoInput int
 
 const (
-	Retire = iota
+	Retire DynoInput = iota
 	Restart
 	Exited
 	StayStarted
