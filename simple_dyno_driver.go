@@ -40,15 +40,24 @@ func (dd *SimpleDynoDriver) Start(ex *Executor) error {
 
 func (dd *SimpleDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 	s = &ExitStatus{}
-	if s.err = ex.cmd.Wait(); s.err != nil {
-		if eErr, ok := s.err.(*exec.ExitError); ok {
+	err := ex.cmd.Wait()
+	if err != nil {
+		if eErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := eErr.Sys().(syscall.WaitStatus); ok {
 				s.code = status.ExitStatus()
 			}
+		} else {
+			// Non ExitErrors are propagated: they are
+			// liable to be errors in starting the
+			// process.
+			s.err = err
 		}
 	}
 
-	ex.waiting <- struct{}{}
+	go func() {
+		ex.waiting <- struct{}{}
+	}()
+
 	return s
 }
 
