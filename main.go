@@ -259,6 +259,11 @@ func main() {
 
 	switch args[0] {
 	case "run":
+		if len(args) <= 1 {
+			fmt.Fprintln(os.Stderr, "Need a program and arguments "+
+				"specified for \"run\".")
+			os.Exit(1)
+		}
 	case "start":
 	default:
 		fmt.Fprintf(os.Stderr, "Command not found: %v\n", args[0])
