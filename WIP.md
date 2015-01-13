@@ -17,8 +17,8 @@ $ ./util/abspath-model
 
 # Build, copy the hsup binary into the chroot's /tmp, and execute it.
 $ go build &&
-  cp hsup tmp/root/tmp &&
+  cp hsup tmp/root &&
   sudo chroot tmp/root env HSUP_ABSPATH_UID=$(id -u) \
 	HSUP_ABSPATH_BASE=tmp/root HEROKU_ACCESS_TOKEN=[REDACTED] \
-	/tmp/hsup run printenv -d abspath -a [MYAPP]
+	/hsup run printenv -d abspath -a [MYAPP]
 ```
