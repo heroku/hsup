@@ -19,7 +19,7 @@ type ApiFormation struct {
 }
 
 func (f *ApiFormation) Args() []string {
-	return []string{f.h.Command}
+	return []string{"bash", "-c", f.h.Command}
 }
 func (f *ApiFormation) Quantity() int {
 	return f.h.Quantity
