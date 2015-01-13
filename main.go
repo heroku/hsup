@@ -158,7 +158,7 @@ func main() {
 
 	dynoDriver, err := FindDynoDriver(*dynoDriverName)
 	if err != nil {
-		log.Fatalln("could not find dyno driver:", *dynoDriverName)
+		log.Fatalln("could not initiate dyno driver:", err.Error())
 	}
 
 	var poller Poller
