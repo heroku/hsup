@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type ApiPoller struct {
+type APIPoller struct {
 	Cl  *heroku.Service
 	App string
 	Dd  DynoDriver
@@ -14,31 +14,31 @@ type ApiPoller struct {
 	lastReleaseID string
 }
 
-type ApiFormation struct {
+type APIFormation struct {
 	h *heroku.Formation
 }
 
-func (f *ApiFormation) Args() []string {
+func (f *APIFormation) Args() []string {
 	return []string{"bash", "-c", f.h.Command}
 }
-func (f *ApiFormation) Quantity() int {
+func (f *APIFormation) Quantity() int {
 	return f.h.Quantity
 }
 
-func (f *ApiFormation) Type() string {
+func (f *APIFormation) Type() string {
 	return f.h.Type
 }
 
 // Listens for new releases by periodically polling the Heroku
 // API. When a new release is detected it is sent to the returned
 // channel.
-func (ap *ApiPoller) Poll() <-chan *Processes {
+func (ap *APIPoller) Poll() <-chan *Processes {
 	out := make(chan *Processes)
 	go ap.pollSynchronous(out)
 	return out
 }
 
-func (ap *ApiPoller) fetchLatest() (*heroku.Release, error) {
+func (ap *APIPoller) fetchLatest() (*heroku.Release, error) {
 	releases, err := ap.Cl.ReleaseList(
 		ap.App, &heroku.ListRange{Descending: true, Field: "version",
 			Max: 1})
@@ -53,7 +53,7 @@ func (ap *ApiPoller) fetchLatest() (*heroku.Release, error) {
 	return releases[0], nil
 }
 
-func (ap *ApiPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
+func (ap *APIPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
 	config, err := ap.Cl.ConfigVarInfo(ap.App)
 	if err != nil {
 		return nil, err
@@ -81,13 +81,13 @@ func (ap *ApiPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
 	}
 
 	for i, hForm := range hForms {
-		procs.forms[i] = &ApiFormation{h: hForm}
+		procs.forms[i] = &APIFormation{h: hForm}
 	}
 
 	return &procs, nil
 }
 
-func (ap *ApiPoller) pollOnce() (*Processes, error) {
+func (ap *APIPoller) pollOnce() (*Processes, error) {
 	release, err := ap.fetchLatest()
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (ap *ApiPoller) pollOnce() (*Processes, error) {
 	return nil, nil
 }
 
-func (ap *ApiPoller) pollSynchronous(out chan<- *Processes) {
+func (ap *APIPoller) pollSynchronous(out chan<- *Processes) {
 	for {
 		procs, err := ap.pollOnce()
 		if err != nil {

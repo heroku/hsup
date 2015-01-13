@@ -167,7 +167,7 @@ func main() {
 		heroku.DefaultTransport.Username = ""
 		heroku.DefaultTransport.Password = token
 		cl := heroku.NewService(heroku.DefaultClient)
-		poller = &ApiPoller{Cl: cl, App: *appName, Dd: dynoDriver}
+		poller = &APIPoller{Cl: cl, App: *appName, Dd: dynoDriver}
 	case controlDir != "":
 		poller = &DirPoller{
 			Dd:      dynoDriver,
