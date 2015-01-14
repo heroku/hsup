@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -70,11 +69,7 @@ func (cb *lcCallbacks) CreateCommand(container *libcontainer.Config, console,
 	dataPath, init string, pipe *os.File, args []string) *exec.Cmd {
 
 	ex := cb.ex
-	ex.cmd = exec.Command(os.Args[0],
-		append(cb.dd.Args, "-d", "abspath",
-			"-c", strconv.Itoa(cb.dd.Concurrency),
-			"-a", cb.dd.AppName)...)
-	log.Printf("%#+v")
+	ex.cmd = exec.Command(ex.args[0], ex.args[1:]...)
 
 	ira := initReturnArgs{Container: container,
 		UncleanRootfs: cb.dd.NewRoot, ConsolePath: ""}
