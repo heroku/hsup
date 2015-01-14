@@ -50,3 +50,11 @@ func (r *Release) Where() SlugWhere {
 		return Local
 	}
 }
+
+func (r *Release) ConfigSlice() []string {
+	var c []string
+	for k, v := range r.config {
+		c = append(c, k+"="+v)
+	}
+	return c
+}

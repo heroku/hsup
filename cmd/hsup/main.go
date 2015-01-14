@@ -41,6 +41,27 @@ func findDynoDriver(name string) (hsup.DynoDriver, error) {
 		return &hsup.DockerDynoDriver{}, nil
 	case "abspath":
 		return &hsup.AbsPathDynoDriver{}, nil
+	case "libcontainer":
+		newRoot := os.Getenv("HSUP_NEWROOT")
+		if newRoot == "" {
+			return nil, fmt.Errorf("HSUP_NEWROOT empty")
+		}
+
+		hostname := os.Getenv("HSUP_HOSTNAME")
+		if hostname == "" {
+			return nil, fmt.Errorf("HSUP_HOSTNAME empty")
+		}
+
+		user := os.Getenv("HSUP_USER")
+		if user == "" {
+			return nil, fmt.Errorf("HSUP_USER empty")
+		}
+
+		return &LibContainerDynoDriver{
+			NewRoot:  newRoot,
+			User:     user,
+			Hostname: hostname,
+		}, nil
 	default:
 		return nil, fmt.Errorf("could not locate driver. "+
 			"specified by the user: %v", name)
@@ -213,6 +234,20 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 
+	log.Println("Args:", args, "LLArgs:", os.Args)
+	irData := os.Getenv("HSUP_INITRETURN_DATA")
+	if irData != "" {
+		// Used only with libcontainer Exec to set up
+		// namespaces and the like.  This *will* clear
+		// environment variables and Args from
+		// "CreateCommand", so be sure to be done processing
+		// or storing them before executing.
+		log.Println("running InitReturns")
+		if err := mustInitReturn(irData); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	if len(args) == 0 {
 		flag.Usage()
 		os.Exit(1)
@@ -240,6 +275,16 @@ func main() {
 	dynoDriver, err := findDynoDriver(*dynoDriverName)
 	if err != nil {
 		log.Fatalln("could not initiate dyno driver:", err.Error())
+	}
+
+	// Inject information for delegation purposes to a
+	// LibContainerDynoDriver.
+	switch dd := dynoDriver.(type) {
+	case *LibContainerDynoDriver:
+		dd.envFill()
+		dd.Args = args
+		dd.AppName = *appName
+		dd.Concurrency = *concurrency
 	}
 
 	var poller hsup.Notifier
