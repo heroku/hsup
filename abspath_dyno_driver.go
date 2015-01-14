@@ -14,9 +14,6 @@ import (
 var ErrNoSlugURL = errors.New("no slug specified")
 
 type AbsPathDynoDriver struct {
-	Base string
-	UID  uint32
-	GID  uint32
 }
 
 func (dd *AbsPathDynoDriver) fetch(release *Release) error {
@@ -52,9 +49,6 @@ func (dd *AbsPathDynoDriver) unpack(release *Release) error {
 
 	cmd := exec.Command("tar", "-C", "/app", "--strip-components=2", "-zxf",
 		"/tmp/slug.tgz")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: dd.cred(),
-	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -62,13 +56,6 @@ func (dd *AbsPathDynoDriver) unpack(release *Release) error {
 	}
 
 	return nil
-}
-
-func (dd *AbsPathDynoDriver) cred() *syscall.Credential {
-	return &syscall.Credential{
-		Uid: dd.UID,
-		Gid: dd.GID,
-	}
 }
 
 func (dd *AbsPathDynoDriver) Build(release *Release) (err error) {
@@ -101,8 +88,7 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) error {
 	}
 
 	ex.cmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: dd.cred(),
-		Setpgid:    true,
+		Setpgid: true,
 	}
 
 	err := ex.cmd.Start()

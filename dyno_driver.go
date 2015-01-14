@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 )
 
 type DynoDriver interface {
@@ -39,22 +37,7 @@ func FindDynoDriver(name string) (DynoDriver, error) {
 	case "docker":
 		return &DockerDynoDriver{}, nil
 	case "abspath":
-		utext := os.Getenv("HSUP_ABSPATH_UID")
-		uid, err := strconv.Atoi(utext)
-		if err != nil {
-			return nil, fmt.Errorf("could not parse "+
-				"HSUP_ABSPATH_UID as integer, was: %q", utext)
-		}
-
-		base := os.Getenv("HSUP_ABSPATH_BASE")
-		if base == "" {
-			return nil, fmt.Errorf("HSUP_ABSPATH_BASE empty")
-		}
-		return &AbsPathDynoDriver{
-			Base: base,
-			UID:  uint32(uid),
-			GID:  uint32(uid),
-		}, nil
+		return &AbsPathDynoDriver{}, nil
 	default:
 		return nil, fmt.Errorf("could not locate driver. "+
 			"specified by the user: %v", name)
