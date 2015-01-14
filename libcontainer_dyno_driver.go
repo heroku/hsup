@@ -53,16 +53,17 @@ func (ira *initReturnArgs) Env() string {
 	return "HSUP_INITRETURN_DATA=" + buf.String()
 }
 
-func mustInitReturn(irData string) (err error) {
+func mustInit(irData string) (err error) {
 	d := gob.NewDecoder(base64.NewDecoder(base64.StdEncoding,
 		strings.NewReader(irData)))
 	ira := new(initReturnArgs)
 	if err = d.Decode(ira); err != nil {
 		panic("could not decode initReturnArgs")
 	}
+	log.Printf("init cmd: %#+v", os.Args)
 
-	return namespaces.InitReturn(ira.Container, ira.UncleanRootfs,
-		ira.ConsolePath, os.NewFile(3, "pipe"))
+	return namespaces.Init(ira.Container, ira.UncleanRootfs,
+		ira.ConsolePath, os.NewFile(3, "pipe"), os.Args)
 }
 
 func (cb *lcCallbacks) CreateCommand(container *libcontainer.Config, console,
@@ -239,12 +240,12 @@ func (dd *LibContainerDynoDriver) lcconf(ex *Executor) *libcontainer.Config {
 		Hostname: dd.Hostname,
 		User:     "0:0",
 		Env:      ex.release.ConfigSlice(),
-		Namespaces: map[string]bool{
-			"NEWIPC": true,
-			"NEWNET": true,
-			"NEWNS":  true,
-			"NEWPID": true,
-			"NEWUTS": true,
+		Namespaces: []libcontainer.Namespace{
+			{Type: "NEWIPC"},
+			{Type: "NEWNET"},
+			{Type: "NEWNS"},
+			{Type: "NEWPID"},
+			{Type: "NEWUTS"},
 		},
 		Capabilities: []string{
 			"CHOWN",

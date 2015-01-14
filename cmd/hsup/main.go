@@ -214,7 +214,7 @@ func main() {
 		// "CreateCommand", so be sure to be done processing
 		// or storing them before executing.
 		log.Println("running InitReturns")
-		if err := mustInitReturn(irData); err != nil {
+		if err := mustInit(irData); err != nil {
 			log.Fatal(err)
 		}
 	}

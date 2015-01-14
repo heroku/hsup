@@ -1,21 +1,100 @@
 {
-	"ImportPath": "github.com/heroku/dyno-run",
-	"GoVersion": "go1.3.3",
+	"ImportPath": "github.com/fdr/hsup",
+	"GoVersion": "go1.4",
+	"Packages": [
+		"./..."
+	],
 	"Deps": [
 		{
+			"ImportPath": "code.google.com/p/go-uuid/uuid",
+			"Comment": "null-15",
+			"Rev": "35bc42037350f0078e3c974c6ea690f1926603ab"
+		},
+		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.6.2-15-gd2f9ffa",
+			"Rev": "d2f9ffa1d9cf25b25191b221229effac1b6de526"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-systemd/dbus",
+			"Comment": "v2",
+			"Rev": "f743bc15d6bddd23662280b4ad20f7c874cdd5ad"
+		},
+		{
+			"ImportPath": "github.com/cyberdelia/heroku-go/v3",
+			"Rev": "594d483b9b6a8ddc7cd2f1e3e7d1de92fa2de665"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/archive",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/fileutils",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/ioutils",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
 			"ImportPath": "github.com/docker/docker/pkg/mount",
-			"Comment": "v1.3.0-446-ga131032",
-			"Rev": "a1310324221a381946062fde443d675990996fa2"
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/pools",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/promise",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
 		},
 		{
 			"ImportPath": "github.com/docker/docker/pkg/symlink",
-			"Comment": "v1.3.0-446-ga131032",
-			"Rev": "a1310324221a381946062fde443d675990996fa2"
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/system",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/units",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
 		},
 		{
 			"ImportPath": "github.com/docker/libcontainer",
-			"Comment": "v1.2.0-162-g7ce34f5",
-			"Rev": "7ce34f58cbd4884634a0f1f82c4aaab1168ea0de"
+			"Comment": "v1.4.0-72-g1d3b258",
+			"Rev": "1d3b2589d734dc94a1719a3af40b87ed8319f329"
+		},
+		{
+			"ImportPath": "github.com/fsouza/go-dockerclient",
+			"Rev": "bc54f3734b9b098e24680d5ad686f602bc152df4"
+		},
+		{
+			"ImportPath": "github.com/godbus/dbus",
+			"Comment": "0-13-g25a4b8c",
+			"Rev": "25a4b8ca48c64b3d631110fb74a210f56c401e0b"
+		},
+		{
+			"ImportPath": "github.com/ogier/pflag",
+			"Rev": "e4f7d00f344b0954fa3791a8527d10ba7334eceb"
+		},
+		{
+			"ImportPath": "github.com/syndtr/gocapability/capability",
+			"Rev": "3c85049eaeb429febe7788d9c7aac42322a377fe"
 		}
 	]
 }
