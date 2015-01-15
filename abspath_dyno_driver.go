@@ -81,7 +81,8 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) error {
 	// Fill environment vector from Heroku configuration, with a
 	// default $PATH.
 	ex.cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:" +
-		"/usr/sbin:/usr/bin:/sbin:/bin"}
+		"/usr/sbin:/usr/bin:/sbin:/bin",
+		"HOME=/app"}
 
 	for k, v := range ex.release.config {
 		ex.cmd.Env = append(ex.cmd.Env, k+"="+v)
