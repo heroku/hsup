@@ -76,7 +76,6 @@ func (cb *lcCallbacks) CreateCommand(container *libcontainer.Config, console,
 
 	// Set up abspath driver environment.
 	ex.cmd.Env = append([]string{ira.Env()}, cb.dd.Env...)
-	log.Printf("%#+v", ex.cmd)
 
 	if ex.cmd.SysProcAttr == nil {
 		ex.cmd.SysProcAttr = &syscall.SysProcAttr{}
