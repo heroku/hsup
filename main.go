@@ -62,7 +62,8 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 		return err
 	}
 
-	if command == "start" {
+	switch command {
+	case "start":
 		for _, form := range p.forms {
 			conc := form.Quantity()
 			log.Printf("formation quantity=%v type=%v\n",
@@ -83,7 +84,7 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 				p.executors = append(p.executors, executor)
 			}
 		}
-	} else if command == "run" {
+	case "run":
 		p.OneShot = true
 		conc := getConcurrency(concurrency, 1)
 		for i := 0; i < conc; i++ {
@@ -101,6 +102,8 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 			}
 			p.executors = append(p.executors, executor)
 		}
+	case "build":
+		p.OneShot = true
 	}
 
 	p.startParallel()
@@ -147,6 +150,11 @@ func main() {
 		if len(args) <= 1 {
 			fmt.Fprintln(os.Stderr, "Need a program and arguments "+
 				"specified for \"run\".")
+			os.Exit(1)
+		}
+	case "build":
+		if len(args) != 1 {
+			fmt.Fprintln(os.Stderr, "\"build\" accepts no arguments")
 			os.Exit(1)
 		}
 	case "start":
