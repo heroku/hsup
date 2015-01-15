@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -13,7 +14,61 @@ import (
 
 var ErrNoSlugURL = errors.New("no slug specified")
 
+const ProfileRunnerText = `#!/bin/bash
+export PS1='\[\033[01;34m\]\w\[\033[00m\] \[\033[01;32m\]$ \[\033[00m\]'
+
+if [ -d /etc/profile.d ]; then
+  for i in /etc/profile.d/*.sh; do
+    if [ -r $i ]; then
+      . $i
+    fi
+  done
+  unset i
+fi
+
+if [ -d /app/.profile.d ]; then
+  for i in /app/.profile.d/*.sh; do
+    if [ -r $i ]; then
+      . $i
+    fi
+  done
+  unset i
+fi
+
+rm $0
+exec "$@"
+`
+
 type AbsPathDynoDriver struct {
+}
+
+type ProfileRunner struct {
+	file *os.File
+}
+
+func (pr *ProfileRunner) Init() (err error) {
+	if pr.file, err = ioutil.TempFile("", "pr_"); err != nil {
+		return err
+	}
+
+	if _, err = pr.file.Write([]byte(ProfileRunnerText)); err != nil {
+		return err
+	}
+
+	fi, err := os.Stat(pr.file.Name())
+	if err != nil {
+		return err
+	}
+
+	if err = os.Chmod(pr.file.Name(), fi.Mode()|0111); err != nil {
+		return err
+	}
+
+	return pr.file.Close()
+}
+
+func (pr *ProfileRunner) Args(args []string) []string {
+	return append([]string{pr.file.Name()}, args...)
 }
 
 func (dd *AbsPathDynoDriver) fetch(release *Release) error {
@@ -70,8 +125,14 @@ func (dd *AbsPathDynoDriver) Build(release *Release) (err error) {
 	return nil
 }
 
-func (dd *AbsPathDynoDriver) Start(ex *Executor) error {
-	ex.cmd = exec.Command(ex.args[0], ex.args[1:]...)
+func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
+	var pr ProfileRunner
+	if err = pr.Init(); err != nil {
+		return err
+	}
+
+	args := pr.Args(ex.args)
+	ex.cmd = exec.Command(args[0], args[1:]...)
 
 	ex.cmd.Stdin = os.Stdin
 	ex.cmd.Stdout = os.Stdout
