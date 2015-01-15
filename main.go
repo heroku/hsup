@@ -55,7 +55,10 @@ type Formation interface {
 
 func (p *Processes) start(command string, args []string, concurrency int) (
 	err error) {
-	err = p.dd.Build(p.r)
+	if os.Getenv("HSUP_SKIP_BUILD") != "TRUE" {
+		err = p.dd.Build(p.r)
+	}
+
 	if err != nil {
 		log.Printf("hsup could not bake image for release %s: %s",
 			p.r.Name(), err.Error())

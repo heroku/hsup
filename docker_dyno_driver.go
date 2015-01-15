@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
+	"path/filepath"
 )
 
 type DockerDynoDriver struct {
@@ -51,9 +52,15 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: name,
 		Config: &docker.Config{
-			Cmd:   ex.args,
-			Env:   env,
-			Image: ex.release.imageName,
+			Cmd: append([]string{"setuidgid", "app",
+				"/hsup", "-d", "abspath", "-a",
+				ex.release.appName, "run", "--"},
+				ex.args...),
+			Env: append(env, "HEROKU_ACCESS_TOKEN="+
+				os.Getenv("HEROKU_ACCESS_TOKEN"),
+				"HSUP_SKIP_BUILD=TRUE"),
+			Image:   ex.release.imageName,
+			Volumes: map[string]struct{}{"/hsup": struct{}{}},
 		},
 	})
 	if err != nil {
@@ -61,7 +68,14 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	}
 	ex.container = container
 
-	err = dd.d.c.StartContainer(ex.container.ID, &docker.HostConfig{})
+	where, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		return err
+	}
+
+	err = dd.d.c.StartContainer(ex.container.ID, &docker.HostConfig{
+		Binds: []string{where + ":/hsup"},
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
