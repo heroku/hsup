@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/docker/daemon/graphdriver"
+	_ "github.com/docker/docker/daemon/graphdriver/aufs"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/cgroups"
 	"github.com/docker/libcontainer/devices"
@@ -70,9 +72,24 @@ func (cb *lcCallbacks) CreateCommand(container *libcontainer.Config, console,
 
 	ex := cb.ex
 	ex.cmd = exec.Command(os.Args[0], ex.Args...)
+	var rootFS string
+	if _, err := os.Stat(cb.dd.NewRoot); err == nil {
+		// NewRoot is an existing valid path
+		rootFS = cb.dd.NewRoot
+	} else {
+		// assume it is a docker image ID
+		driver, err := graphdriver.New("/var/lib/docker", make([]string, 0))
+		if err != nil {
+			panic(err)
+		}
+		rootFS, err = driver.Get(cb.dd.NewRoot, "")
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	ira := initReturnArgs{Container: container,
-		UncleanRootfs: cb.dd.NewRoot, ConsolePath: ""}
+		UncleanRootfs: rootFS, ConsolePath: ""}
 
 	// Set up abspath driver environment.
 	ex.cmd.Env = append([]string{ira.Env()}, cb.dd.Env...)

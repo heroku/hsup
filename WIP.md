@@ -40,3 +40,6 @@ $ godep go build &&
   "HEROKU_ACCESS_TOKEN=$HEROKU_ACCESS_TOKEN" \
   ./hsup run printenv -d libcontainer -a "$HSUP_APP"
 ```
+
+Optionally, `HSUP_NEWROOT` can be a docker image ID from a local docker
+repository. Available images can be listed with `docker images --no-trunc`.
