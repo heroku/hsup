@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -60,27 +59,24 @@ func mustInit(irData string) (err error) {
 	if err = d.Decode(ira); err != nil {
 		panic("could not decode initReturnArgs")
 	}
-	log.Printf("init cmd: %#+v", os.Args)
+	log.Printf("init cmd: %#+v", os.Args[1:])
 
 	return namespaces.Init(ira.Container, ira.UncleanRootfs,
-		ira.ConsolePath, os.NewFile(3, "pipe"), os.Args)
+		ira.ConsolePath, os.NewFile(3, "pipe"), os.Args[1:])
 }
 
 func (cb *lcCallbacks) CreateCommand(container *libcontainer.Config, console,
 	dataPath, init string, pipe *os.File, args []string) *exec.Cmd {
 
 	ex := cb.ex
-	ex.cmd = exec.Command(os.Args[0],
-		append(cb.dd.Args, "-d", "abspath",
-			"-c", strconv.Itoa(cb.dd.Concurrency),
-			"-a", cb.dd.AppName)...)
-	log.Printf("%#+v")
+	ex.cmd = exec.Command(os.Args[0], ex.args...)
 
 	ira := initReturnArgs{Container: container,
 		UncleanRootfs: cb.dd.NewRoot, ConsolePath: ""}
 
 	// Set up abspath driver environment.
 	ex.cmd.Env = append([]string{ira.Env()}, cb.dd.Env...)
+	log.Printf("%#+v", ex.cmd)
 
 	if ex.cmd.SysProcAttr == nil {
 		ex.cmd.SysProcAttr = &syscall.SysProcAttr{}
