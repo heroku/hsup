@@ -149,6 +149,7 @@ func main() {
 		"concurrency number")
 	dynoDriverName := flag.StringP("dynodriver", "d", "simple",
 		"specify a dyno driver (program that starts a program)")
+	controlPort := flag.IntP("controlport", "p", -1, "start a control service on 127.0.0.1 on this port")
 	flag.Parse()
 	args := flag.Args()
 
@@ -201,8 +202,12 @@ func main() {
 	procs := poller.Poll()
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-
 	var p *Processes
+
+	if *controlPort != -1 {
+		procs = StartControlAPI(*controlPort, procs)
+	}
+
 	for {
 		select {
 		case newProcs := <-procs:
