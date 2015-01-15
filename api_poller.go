@@ -19,7 +19,7 @@ type APIFormation struct {
 }
 
 func (f *APIFormation) Args() []string {
-	return []string{"bash", "-c", f.h.Command}
+	return []string{"bash", "--login", "-c", f.h.Command}
 }
 func (f *APIFormation) Quantity() int {
 	return f.h.Quantity
