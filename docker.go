@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"time"
@@ -63,16 +64,21 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 }
 
 func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error) {
-	slugURL := release.slugURL
 	t := time.Now()
 	inputBuf, outputBuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 	tr := tar.NewWriter(inputBuf)
+	defer tr.Close()
+
 	dockerContents := fmt.Sprintf(`FROM %s
-RUN rm -rf /app
-RUN curl '%s' -o /slug.img
-RUN (cd / && mkdir /app && tar -xzf /slug.img) && rm -rf /app/log /app/tmp && mkdir /app/log /app/tmp &&  chown -R daemon:daemon /app && chmod -R go+r /app && find /app -type d | xargs chmod go+x
+RUN groupadd -r app && useradd -r -g app app
+RUN mkdir /app
+RUN chown app:app /app
+COPY hsup /tmp/hsup
+RUN chmod a+x /tmp/hsup
+RUN setuidgid app env HEROKU_ACCESS_TOKEN=%s /tmp/hsup -d abspath build -a %s
+RUN rm /tmp/hsup
 WORKDIR /app
-`, si.image.ID, slugURL)
+`, si.image.ID, os.Getenv("HEROKU_ACCESS_TOKEN"), release.appName)
 
 	log.Println(dockerContents)
 	tr.WriteHeader(&tar.Header{
@@ -81,6 +87,18 @@ WORKDIR /app
 		ModTime: t, AccessTime: t,
 		ChangeTime: t})
 	tr.Write([]byte(dockerContents))
+
+	hsupBytes, err := ioutil.ReadFile(os.Args[0])
+	if err != nil {
+		return "", err
+	}
+
+	tr.WriteHeader(&tar.Header{
+		Name:    "hsup",
+		Size:    int64(len(hsupBytes)),
+		ModTime: t, AccessTime: t,
+		ChangeTime: t})
+	tr.Write([]byte(hsupBytes))
 	tr.Close()
 
 	imageName := release.Name()
