@@ -6,12 +6,21 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"syscall"
 
 	"github.com/cyberdelia/heroku-go/v3"
 	flag "github.com/ogier/pflag"
 )
+
+func linuxAmd64Path() string {
+	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		return os.Args[0]
+	}
+
+	return os.Args[0] + "-linux-amd64"
+}
 
 var ErrNoReleases = errors.New("No releases found")
 

@@ -88,7 +88,7 @@ WORKDIR /app
 		ChangeTime: t})
 	tr.Write([]byte(dockerContents))
 
-	hsupBytes, err := ioutil.ReadFile(os.Args[0])
+	hsupBytes, err := ioutil.ReadFile(linuxAmd64Path())
 	if err != nil {
 		return "", err
 	}

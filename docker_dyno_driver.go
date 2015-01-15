@@ -68,7 +68,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	}
 	ex.container = container
 
-	where, err := filepath.Abs(os.Args[0])
+	where, err := filepath.Abs(linuxAmd64Path())
 	if err != nil {
 		return err
 	}
