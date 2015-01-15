@@ -39,9 +39,6 @@ rm $0
 exec "$@"
 `
 
-type AbsPathDynoDriver struct {
-}
-
 type ProfileRunner struct {
 	file *os.File
 }
@@ -70,6 +67,8 @@ func (pr *ProfileRunner) Init() (err error) {
 func (pr *ProfileRunner) Args(args []string) []string {
 	return append([]string{pr.file.Name()}, args...)
 }
+
+type AbsPathDynoDriver struct{}
 
 func (dd *AbsPathDynoDriver) fetch(release *Release) error {
 	if release.slugURL == "" {
