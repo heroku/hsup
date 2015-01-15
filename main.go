@@ -64,7 +64,7 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 
 	if command == "start" {
 		for _, form := range p.forms {
-			conc := getConcurrency(concurrency, form.Quantity())
+			conc := form.Quantity()
 			log.Printf("formation quantity=%v type=%v\n",
 				conc, form.Type())
 
