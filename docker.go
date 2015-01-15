@@ -103,6 +103,14 @@ WORKDIR /app
 
 	imageName := release.Name()
 
+	if _, err = d.c.InspectImage(imageName); err == nil {
+		// Successfully reuse the image that has -- probably
+		// -- been built before for the release in question.
+		// This avoids another long slug download, for
+		// instance.
+		return imageName, nil
+	}
+
 	opts := docker.BuildImageOptions{
 		Name:           imageName,
 		InputStream:    inputBuf,
