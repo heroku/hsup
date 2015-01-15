@@ -91,8 +91,7 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) error {
 		Setpgid: true,
 	}
 
-	err := ex.cmd.Start()
-	if err != nil {
+	if err = ex.cmd.Start(); err != nil {
 		return err
 	}
 
