@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/cyberdelia/heroku-go/v3"
@@ -62,6 +63,54 @@ type Formation interface {
 	Type() string
 }
 
+type ConcResolver interface {
+	Resolve(Formation) int
+}
+
+type DefaultConcResolver struct{}
+
+func (cr DefaultConcResolver) Resolve(form Formation) int {
+	// By default, run only one of every process that has scale
+	// factors above zero.
+	if form.Quantity() > 0 {
+		return 1
+	}
+
+	return 0
+}
+
+type ExplicitConcResolver map[string]int
+
+func MustParseExplicitConcResolver(args []string) ExplicitConcResolver {
+	// Parse a slice full of fragments like: "web=1", "worker=2"
+	// and build a map from formation type names to scale factors
+	// if there are no parsing errors.
+	ret := make(map[string]int)
+	for _, arg := range args {
+		parts := strings.SplitN(arg, "=", 2)
+		if len(parts) != 2 {
+			log.Fatalf("could not parse "+
+				"parallelism specification: %v",
+				arg)
+		}
+
+		n, err := strconv.Atoi(parts[1])
+		if err != nil {
+			log.Fatalln("could not parse " +
+				"parallelism" +
+				"specification: not a " +
+				"valid integer")
+		}
+
+		ret[parts[0]] = n
+	}
+	return ret
+}
+
+func (cr ExplicitConcResolver) Resolve(form Formation) int {
+	return cr[form.Type()]
+}
+
 func (p *Processes) start(command string, args []string, concurrency int) (
 	err error) {
 	if os.Getenv("HSUP_SKIP_BUILD") != "TRUE" {
@@ -76,8 +125,16 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 
 	switch command {
 	case "start":
+		var cr ConcResolver
+		switch len(args) {
+		case 0:
+			cr = DefaultConcResolver{}
+		default:
+			cr = MustParseExplicitConcResolver(args)
+		}
+
 		for _, form := range p.forms {
-			conc := form.Quantity()
+			conc := cr.Resolve(form)
 			log.Printf("formation quantity=%v type=%v\n",
 				conc, form.Type())
 
