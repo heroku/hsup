@@ -17,6 +17,10 @@ type StopRequest struct {
 	Processes []string
 }
 
+type StopResponse struct {
+	StoppedProcesses []string
+}
+
 type ControlAPI struct{
 	processes *Processes
 }
@@ -49,7 +53,8 @@ func (c *ControlAPI) ServeGET(w http.ResponseWriter, r *http.Request) {
 			resp.Processes[e.processType] = stateNames[e.state]
 		}
 		enc := json.NewEncoder(w)
-		w.WriteHeader(500)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
 		enc.Encode(resp)
 	}
 }
@@ -64,15 +69,20 @@ func (c *ControlAPI) ServePOST(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(err.Error()))
 			return
 		}
+		stopped := []string{}
 		for _, p := range stop.Processes {
 			for _, e := range c.processes.executors {
 				if e.processType == p {
 					log.Printf("Retiring %s", p)
-					w.Write([]byte(p))
 					e.Trigger(Retire)
+					stopped = append(stopped, p)
 				}
 			}
 		}
+		enc := json.NewEncoder(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		enc.Encode(StopResponse{stopped})
 	}
 }
 
