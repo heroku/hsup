@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
-	"encoding/json"
 	"net/http"
 )
 
-var stateNames = map[DynoState]string{Stopped : "Starting", Started: "Started", Retiring: "Stopping", Retired: "Finished"}
+var stateNames = map[DynoState]string{Stopped: "Starting", Started: "Started", Retiring: "Stopping", Retired: "Finished"}
 
 type StatusResponse struct {
 	Processes map[string]string
@@ -21,14 +21,14 @@ type StopResponse struct {
 	StoppedProcesses []string
 }
 
-type ControlAPI struct{
+type ControlAPI struct {
 	processes *Processes
 }
 
-func (c *ControlAPI)Tee(procs  <-chan *Processes) <-chan *Processes {
+func (c *ControlAPI) Tee(procs <-chan *Processes) <-chan *Processes {
 	out := make(chan *Processes)
-	go func(){
-		for{
+	go func() {
+		for {
 			p := <-procs
 			c.processes = p
 			out <- p
@@ -37,11 +37,12 @@ func (c *ControlAPI)Tee(procs  <-chan *Processes) <-chan *Processes {
 	return out
 }
 
-
 func (c *ControlAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case "GET":  c.ServeGET(w, r)
-	case "POST": c.ServePOST(w, r)
+	case "GET":
+		c.ServeGET(w, r)
+	case "POST":
+		c.ServePOST(w, r)
 	}
 }
 
@@ -91,4 +92,3 @@ func StartControlAPI(port int, processes <-chan *Processes) <-chan *Processes {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), api)
 	return api.Tee(processes)
 }
-
