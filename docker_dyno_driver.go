@@ -49,8 +49,10 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 		env = append(env, "HEROKU_ACCESS_TOKEN="+os.Getenv("HEROKU_ACCESS_TOKEN"))
 	}
 
+	hostConfig := &docker.HostConfig{}
 	if os.Getenv("CONTROL_DIR") != "" {
 		env = append(env, "CONTROL_DIR="+os.Getenv("CONTROL_DIR"))
+		hostConfig.Binds = []string{fmt.Sprintf("%s:%s", os.Getenv("CONTROL_DIR"),os.Getenv("CONTROL_DIR"))}
 	}
 	// attach a timestamp as some extra entropy because container names must be
 	// unique
@@ -66,7 +68,9 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 			Env:     append(env, "HSUP_SKIP_BUILD=TRUE"),
 			Image:   ex.release.imageName,
 			Volumes: map[string]struct{}{"/hsup": struct{}{}},
+
 		},
+		HostConfig: hostConfig,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -79,7 +83,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	}
 
 	err = dd.d.c.StartContainer(ex.container.ID, &docker.HostConfig{
-		Binds: []string{where + ":/hsup"},
+		Binds: append(hostConfig.Binds, []string{where + ":/hsup"}...),
 	})
 	if err != nil {
 		log.Fatal(err)
