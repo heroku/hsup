@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"fmt"
@@ -98,7 +98,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 
 func (dd *DockerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 	code, err := dd.d.c.WaitContainer(ex.container.ID)
-	return &ExitStatus{code: code, err: err}
+	return &ExitStatus{Code: code, Err: err}
 }
 
 func (dd *DockerDynoDriver) Stop(ex *Executor) error {
