@@ -45,7 +45,13 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	for k, v := range ex.release.config {
 		env = append(env, k+"="+v)
 	}
+    if os.Getenv("HEROKU_ACCESS_TOKEN") != "" {
+		env = append(env, "HEROKU_ACCESS_TOKEN="+os.Getenv("HEROKU_ACCESS_TOKEN"))
+	}
 
+	if os.Getenv("CONTROL_DIR") != "" {
+		env = append(env, "CONTROL_DIR="+os.Getenv("CONTROL_DIR"))
+	}
 	// attach a timestamp as some extra entropy because container names must be
 	// unique
 	name := fmt.Sprintf("%v.%v", ex.Name(), time.Now().Unix())
@@ -56,9 +62,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 				"/hsup", "-d", "abspath", "-a",
 				ex.release.appName, "run", "--"},
 				ex.args...),
-			Env: append(env, "HEROKU_ACCESS_TOKEN="+
-				os.Getenv("HEROKU_ACCESS_TOKEN"),
-				"HSUP_SKIP_BUILD=TRUE"),
+			Env: append(env, "HSUP_SKIP_BUILD=TRUE"),
 			Image:   ex.release.imageName,
 			Volumes: map[string]struct{}{"/hsup": struct{}{}},
 		},
