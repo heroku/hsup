@@ -9,6 +9,7 @@ type DirPoller struct {
 	Dd      DynoDriver
 	Dir     string
 	AppName string
+	OneShot bool
 
 	c             *conf
 	lastReleaseID string
@@ -73,8 +74,9 @@ func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 				slugURL: cd.Slug,
 				version: cd.Version,
 			},
-			forms: make([]Formation, len(cd.Processes)),
-			dd:    dp.Dd,
+			forms:   make([]Formation, len(cd.Processes)),
+			dd:      dp.Dd,
+			OneShot: dp.OneShot,
 		}
 
 		for i := range cd.Processes {

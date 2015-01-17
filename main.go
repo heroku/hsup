@@ -88,21 +88,22 @@ func MustParseExplicitConcResolver(args []string) ExplicitConcResolver {
 	ret := make(map[string]int)
 	for _, arg := range args {
 		parts := strings.SplitN(arg, "=", 2)
-		if len(parts) != 2 {
-			log.Fatalf("could not parse "+
-				"parallelism specification: %v",
-				arg)
+		switch len(parts) {
+		case 2:
+			n, err := strconv.Atoi(parts[1])
+			if err != nil {
+				log.Fatalln("could not parse parallelism " +
+					"specification: not a valid integer.")
+			}
+
+			ret[parts[0]] = n
+		case 1:
+			ret[parts[0]] = 1
+		default:
+			panic(fmt.Sprintf("BUG: start parsing %v, %v", args,
+				parts))
 		}
 
-		n, err := strconv.Atoi(parts[1])
-		if err != nil {
-			log.Fatalln("could not parse " +
-				"parallelism" +
-				"specification: not a " +
-				"valid integer")
-		}
-
-		ret[parts[0]] = n
 	}
 	return ret
 }
@@ -147,7 +148,12 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 					release:     p.r,
 					complete:    make(chan struct{}),
 					state:       Stopped,
+					OneShot:     p.OneShot,
 					newInput:    make(chan DynoInput),
+				}
+
+				if executor.OneShot {
+					executor.status = make(chan *ExitStatus)
 				}
 
 				p.executors = append(p.executors, executor)
@@ -203,6 +209,8 @@ func main() {
 		flag.PrintDefaults()
 	}
 	appName := flag.StringP("app", "a", "", "app name")
+	oneShot := flag.BoolP("oneshot", "", false, "run as one-shot processes: "+
+		"no restarting")
 	concurrency := flag.IntP("concurrency", "c", -1,
 		"concurrency number")
 	dynoDriverName := flag.StringP("dynodriver", "d", "simple",
@@ -246,12 +254,18 @@ func main() {
 		heroku.DefaultTransport.Username = ""
 		heroku.DefaultTransport.Password = token
 		cl := heroku.NewService(heroku.DefaultClient)
-		poller = &APIPoller{Cl: cl, App: *appName, Dd: dynoDriver}
+		poller = &APIPoller{
+			Cl:      cl,
+			App:     *appName,
+			Dd:      dynoDriver,
+			OneShot: *oneShot,
+		}
 	case controlDir != "":
 		poller = &DirPoller{
 			Dd:      dynoDriver,
 			Dir:     controlDir,
 			AppName: *appName,
+			OneShot: *oneShot,
 		}
 	default:
 		panic("one of token or watch dir ought to have been defined")

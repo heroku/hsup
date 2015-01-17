@@ -7,9 +7,10 @@ import (
 )
 
 type APIPoller struct {
-	Cl  *heroku.Service
-	App string
-	Dd  DynoDriver
+	Cl      *heroku.Service
+	App     string
+	Dd      DynoDriver
+	OneShot bool
 
 	lastReleaseID string
 }
@@ -21,6 +22,7 @@ type APIFormation struct {
 func (f *APIFormation) Args() []string {
 	return []string{"bash", "--login", "-c", f.h.Command}
 }
+
 func (f *APIFormation) Quantity() int {
 	return f.h.Quantity
 }
@@ -76,8 +78,9 @@ func (ap *APIPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
 			slugURL: slug.Blob.URL,
 			version: rel.Version,
 		},
-		forms: make([]Formation, len(hForms), len(hForms)),
-		dd:    ap.Dd,
+		forms:   make([]Formation, len(hForms), len(hForms)),
+		dd:      ap.Dd,
+		OneShot: ap.OneShot,
 	}
 
 	for i, hForm := range hForms {
