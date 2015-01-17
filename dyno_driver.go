@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"fmt"
@@ -12,8 +12,8 @@ type DynoDriver interface {
 }
 
 type ExitStatus struct {
-	code int
-	err  error
+	Code int
+	Err  error
 }
 
 type Release struct {

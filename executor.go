@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"errors"
@@ -35,7 +35,7 @@ type Executor struct {
 	release     *Release
 	processID   string
 	processType string
-	status      chan *ExitStatus
+	Status      chan *ExitStatus
 	complete    chan struct{}
 
 	// simple dyno driver properties
@@ -60,9 +60,9 @@ func (e *Executor) Trigger(input DynoInput) {
 }
 
 func (e *Executor) wait() {
-	if s := e.dynoDriver.Wait(e); e.status != nil {
-		log.Println("Executor exits:", e.Name(), "exit code:", s.code)
-		e.status <- s
+	if s := e.dynoDriver.Wait(e); e.Status != nil {
+		log.Println("Executor exits:", e.Name(), "exit code:", s.Code)
+		e.Status <- s
 	}
 	e.Trigger(Exited)
 }

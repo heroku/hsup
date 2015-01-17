@@ -2,7 +2,7 @@ Godeps
 tmp
 .idea
 *.iml
-hsup
+./hsup
 
 # Sourced from https://github.com/github/gitignore/blob/6f8aee0564363a55db374969c03dd35895801786/Go.gitignore
 #

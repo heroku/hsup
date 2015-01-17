@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"log"
@@ -44,13 +44,13 @@ func (dd *SimpleDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 	if err != nil {
 		if eErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := eErr.Sys().(syscall.WaitStatus); ok {
-				s.code = status.ExitStatus()
+				s.Code = status.ExitStatus()
 			}
 		} else {
 			// Non ExitErrors are propagated: they are
 			// liable to be errors in starting the
 			// process.
-			s.err = err
+			s.Err = err
 		}
 	}
 
