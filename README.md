@@ -52,13 +52,13 @@ echo '{
     "Processes": [
         {
             "Args": ["./web-server", "arg"],
-	    "Quantity": 2,
-	    "Type": "web"
+            "Quantity": 2,
+            "Type": "web"
         },
         {
             "Args": ["./worker", "arg"],
-	    "Quantity": 2,
-	    "Type": "worker"
+            "Quantity": 2,
+            "Type": "worker"
         }
     ]
 }' > "$CONTROL_DIR"/new
