@@ -112,7 +112,8 @@ func (cr ExplicitConcResolver) Resolve(form Formation) int {
 	return cr[form.Type()]
 }
 
-func (p *Processes) start(command string, args []string, concurrency int) (
+func (p *Processes) start(command string, args []string, concurrency int,
+	startNumber int) (
 	err error) {
 	if os.Getenv("HSUP_SKIP_BUILD") != "TRUE" {
 		err = p.dd.Build(p.r)
@@ -138,12 +139,12 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 			conc := cr.Resolve(form)
 			log.Printf("formation quantity=%v type=%v\n",
 				conc, form.Type())
-
 			for i := 0; i < conc; i++ {
+				lpid := strconv.Itoa(i + startNumber)
 				executor := &Executor{
 					args:        form.Args(),
 					dynoDriver:  p.dd,
-					processID:   strconv.Itoa(i + 1),
+					processID:   lpid,
 					processType: form.Type(),
 					release:     p.r,
 					complete:    make(chan struct{}),
@@ -163,10 +164,11 @@ func (p *Processes) start(command string, args []string, concurrency int) (
 		p.OneShot = true
 		conc := getConcurrency(concurrency, 1)
 		for i := 0; i < conc; i++ {
+			lpid := strconv.Itoa(i + startNumber)
 			executor := &Executor{
 				args:        args,
 				dynoDriver:  p.dd,
-				processID:   strconv.Itoa(i + 1),
+				processID:   lpid,
 				processType: "run",
 				release:     p.r,
 				complete:    make(chan struct{}),
@@ -211,6 +213,8 @@ func main() {
 	appName := flag.StringP("app", "a", "", "app name")
 	oneShot := flag.BoolP("oneshot", "", false, "run as one-shot processes: "+
 		"no restarting")
+	startNumber := flag.IntP("start-number", "", 1,
+		"the first assigned number to process types, e.g. web.1")
 	concurrency := flag.IntP("concurrency", "c", -1,
 		"concurrency number")
 	dynoDriverName := flag.StringP("dynodriver", "d", "simple",
@@ -287,7 +291,8 @@ func main() {
 				p.stopParallel()
 			}
 			p = newProcs
-			err = p.start(args[0], args[1:], *concurrency)
+			err = p.start(args[0], args[1:], *concurrency,
+				*startNumber)
 			if err != nil {
 				log.Fatalln("could not start process:", err)
 			}

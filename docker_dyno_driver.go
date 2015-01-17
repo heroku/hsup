@@ -58,10 +58,11 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: name,
 		Config: &docker.Config{
-			Cmd: append([]string{"setuidgid", "app",
+			Cmd: []string{"setuidgid", "app",
 				"/hsup", "-d", "abspath", "-a",
-				ex.release.appName, "run", "--"},
-				ex.args...),
+				ex.release.appName, "--oneshot",
+				"--start-number=" + ex.processID,
+				"start", ex.processType},
 			Env:     append(env, "HSUP_SKIP_BUILD=TRUE"),
 			Image:   ex.release.imageName,
 			Volumes: map[string]struct{}{"/hsup": struct{}{}},

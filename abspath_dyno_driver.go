@@ -142,7 +142,7 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 	// default $PATH.
 	ex.cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:" +
 		"/usr/sbin:/usr/bin:/sbin:/bin",
-		"HOME=/app"}
+		"HOME=/app", "DYNO=" + ex.Name(), "PORT=5000"}
 
 	for k, v := range ex.release.config {
 		ex.cmd.Env = append(ex.cmd.Env, k+"="+v)
