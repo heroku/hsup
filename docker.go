@@ -75,7 +75,7 @@ RUN mkdir /app
 RUN chown app:app /app
 COPY hsup /tmp/hsup
 RUN chmod a+x /tmp/hsup
-RUN setuidgid app env HEROKU_ACCESS_TOKEN=%s CONTROL_DIR=%s /tmp/hsup -d abspath build -a %s
+RUN ["setuidgid", "app", "env", "HEROKU_ACCESS_TOKEN=%s", "CONTROL_DIR=%s", "/tmp/hsup", "-d", "abspath", "build", "-a", "%s"]
 RUN rm /tmp/hsup
 WORKDIR /app
 `, si.image.ID, os.Getenv("HEROKU_ACCESS_TOKEN"), os.Getenv("CONTROL_DIR"), release.appName)

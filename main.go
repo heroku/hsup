@@ -189,6 +189,7 @@ func getConcurrency(concurrency int, defaultConcurrency int) int {
 
 func main() {
 	var err error
+	log.Println("Starting hsup")
 
 	token := os.Getenv("HEROKU_ACCESS_TOKEN")
 	controlDir := os.Getenv("CONTROL_DIR")
