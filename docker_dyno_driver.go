@@ -44,7 +44,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 		Version: ex.release.version,
 		Env:     ex.release.config,
 		Processes: []DirFormation{
-			DirFormation{
+			{
 				FArgs:     ex.args,
 				FQuantity: 1,
 				FType:     ex.processType,
@@ -66,7 +66,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 			Env: []string{"HSUP_SKIP_BUILD=TRUE",
 				"HSUP_CONTROL_GOB=" + cd.textGob()},
 			Image:   ex.release.imageName,
-			Volumes: map[string]struct{}{"/hsup": struct{}{}},
+			Volumes: map[string]struct{}{"/hsup": {}},
 		},
 	})
 	if err != nil {

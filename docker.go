@@ -70,7 +70,7 @@ func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error
 	tr := tar.NewWriter(inputBuf)
 	defer tr.Close()
 
-	cd := &ControlDir{Slug: release.slugURL}
+	cd := ControlDir{Slug: release.slugURL}
 	genv := "HSUP_CONTROL_GOB=" + cd.textGob()
 	args := []string{"setuidgid", "app", "env", genv,
 		"/tmp/hsup", "-d", "abspath", "build", "-a", release.appName}
