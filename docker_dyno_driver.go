@@ -40,11 +40,7 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 }
 
 func (dd *DockerDynoDriver) Start(ex *Executor) error {
-	// Fill environment vector from Heroku configuration.
 	var env []string
-	for k, v := range ex.release.config {
-		env = append(env, k+"="+v)
-	}
 	if os.Getenv("HEROKU_ACCESS_TOKEN") != "" {
 		env = append(env, "HEROKU_ACCESS_TOKEN="+os.Getenv("HEROKU_ACCESS_TOKEN"))
 	}
@@ -52,6 +48,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	if os.Getenv("CONTROL_DIR") != "" {
 		env = append(env, "CONTROL_DIR="+os.Getenv("CONTROL_DIR"))
 	}
+
 	// attach a timestamp as some extra entropy because container names must be
 	// unique
 	name := fmt.Sprintf("%v.%v", ex.Name(), time.Now().Unix())
