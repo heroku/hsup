@@ -40,13 +40,16 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 }
 
 func (dd *DockerDynoDriver) Start(ex *Executor) error {
-	var env []string
-	if os.Getenv("HEROKU_ACCESS_TOKEN") != "" {
-		env = append(env, "HEROKU_ACCESS_TOKEN="+os.Getenv("HEROKU_ACCESS_TOKEN"))
-	}
-
-	if os.Getenv("CONTROL_DIR") != "" {
-		env = append(env, "CONTROL_DIR="+os.Getenv("CONTROL_DIR"))
+	cd := ControlDir{
+		Version: ex.release.version,
+		Env:     ex.release.config,
+		Processes: []DirFormation{
+			DirFormation{
+				FArgs:     ex.args,
+				FQuantity: 1,
+				FType:     ex.processType,
+			},
+		},
 	}
 
 	// attach a timestamp as some extra entropy because container names must be
@@ -60,7 +63,8 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 				ex.release.appName, "--oneshot",
 				"--start-number=" + ex.processID,
 				"start", ex.processType},
-			Env:     append(env, "HSUP_SKIP_BUILD=TRUE"),
+			Env: []string{"HSUP_SKIP_BUILD=TRUE",
+				"HSUP_CONTROL_GOB=" + cd.textGob()},
 			Image:   ex.release.imageName,
 			Volumes: map[string]struct{}{"/hsup": struct{}{}},
 		},

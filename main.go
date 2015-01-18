@@ -199,10 +199,16 @@ func main() {
 	var err error
 	log.Println("Starting hsup")
 
+	controlGob := os.Getenv("HSUP_CONTROL_GOB")
 	token := os.Getenv("HEROKU_ACCESS_TOKEN")
 	controlDir := os.Getenv("CONTROL_DIR")
 
-	if token == "" && controlDir == "" {
+	if token == "" && controlDir == "" && controlGob == "" {
+		// Omit mentioning "HSUP_CONTROL_GOB" as guidance to
+		// avoid this error even if it is technically accurate
+		// because it is only ever submitted by
+		// self-invocations of hsup, i.e. that is invariably a
+		// bug and not useful guidance for most humans.
 		log.Fatal("need HEROKU_ACCESS_TOKEN or CONTROL_DIR")
 	}
 
@@ -254,6 +260,13 @@ func main() {
 
 	var poller Poller
 	switch {
+	case controlGob != "":
+		poller = &GobPoller{
+			Dd:      dynoDriver,
+			AppName: *appName,
+			OneShot: *oneShot,
+			Payload: controlGob,
+		}
 	case token != "":
 		heroku.DefaultTransport.Username = ""
 		heroku.DefaultTransport.Password = token

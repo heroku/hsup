@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -69,16 +70,25 @@ func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error
 	tr := tar.NewWriter(inputBuf)
 	defer tr.Close()
 
+	cd := &ControlDir{Slug: release.slugURL}
+	genv := "HSUP_CONTROL_GOB=" + cd.textGob()
+	args := []string{"setuidgid", "app", "env", genv,
+		"/tmp/hsup", "-d", "abspath", "build", "-a", release.appName}
+	argText, err := json.Marshal(args)
+	if err != nil {
+		panic(fmt.Sprintln("could not marshal argv:", args))
+	}
+
 	dockerContents := fmt.Sprintf(`FROM %s
 RUN groupadd -r app && useradd -r -g app app
 RUN mkdir /app
 RUN chown app:app /app
 COPY hsup /tmp/hsup
 RUN chmod a+x /tmp/hsup
-RUN ["setuidgid", "app", "env", "HEROKU_ACCESS_TOKEN=%s", "CONTROL_DIR=%s", "/tmp/hsup", "-d", "abspath", "build", "-a", "%s"]
+RUN %s
 RUN rm /tmp/hsup
 WORKDIR /app
-`, si.image.ID, os.Getenv("HEROKU_ACCESS_TOKEN"), os.Getenv("CONTROL_DIR"), release.appName)
+`, si.image.ID, argText)
 
 	log.Println(dockerContents)
 	tr.WriteHeader(&tar.Header{

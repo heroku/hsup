@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/gob"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -50,10 +54,30 @@ func (dp *DirPoller) Poll() <-chan *Processes {
 	return out
 }
 
+func procsFromControlDir(cd *ControlDir, app string, oneShot bool,
+	dd DynoDriver) *Processes {
+	procs := &Processes{
+		r: &Release{
+			appName: app,
+			config:  cd.Env,
+			slugURL: cd.Slug,
+			version: cd.Version,
+		},
+		forms:   make([]Formation, len(cd.Processes)),
+		dd:      dd,
+		OneShot: oneShot,
+	}
+
+	for i := range cd.Processes {
+		procs.forms[i] = &cd.Processes[i]
+	}
+
+	return procs
+}
+
 func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 	for {
 		var cd *ControlDir
-		var procs *Processes
 
 		newInfo, err := dp.c.Poll()
 		if err != nil {
@@ -67,24 +91,46 @@ func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 		}
 
 		cd = dp.c.Snapshot().(*ControlDir)
-		procs = &Processes{
-			r: &Release{
-				appName: dp.AppName,
-				config:  cd.Env,
-				slugURL: cd.Slug,
-				version: cd.Version,
-			},
-			forms:   make([]Formation, len(cd.Processes)),
-			dd:      dp.Dd,
-			OneShot: dp.OneShot,
-		}
-
-		for i := range cd.Processes {
-			procs.forms[i] = &cd.Processes[i]
-		}
-
-		out <- procs
+		out <- procsFromControlDir(cd, dp.AppName, dp.OneShot, dp.Dd)
 	wait:
 		time.Sleep(10 * time.Second)
 	}
+}
+
+type GobPoller struct {
+	Dd      DynoDriver
+	AppName string
+	OneShot bool
+
+	Payload string
+}
+
+func (cd *ControlDir) textGob() string {
+	buf := bytes.Buffer{}
+	b64enc := base64.NewEncoder(base64.StdEncoding, &buf)
+	enc := gob.NewEncoder(b64enc)
+	err := enc.Encode(cd)
+	b64enc.Close()
+	if err != nil {
+		panic("could not encode gob:" + err.Error())
+	}
+
+	return buf.String()
+}
+
+func (gp *GobPoller) Poll() <-chan *Processes {
+	out := make(chan *Processes)
+	d := gob.NewDecoder(base64.NewDecoder(base64.StdEncoding,
+		strings.NewReader(gp.Payload)))
+	cd := new(ControlDir)
+	if err := d.Decode(cd); err != nil {
+		panic("could not decode gob:" + err.Error())
+	}
+
+	procs := procsFromControlDir(cd, gp.AppName, gp.OneShot, gp.Dd)
+	go func() {
+		out <- procs
+	}()
+
+	return out
 }
