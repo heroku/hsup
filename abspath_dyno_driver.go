@@ -75,22 +75,30 @@ func (dd *AbsPathDynoDriver) fetch(release *Release) error {
 		return ErrNoSlugURL
 	}
 
-	log.Printf("fetching slug URL %q", release.slugURL)
+	switch release.Where() {
+	case Local:
+		// No-op: the slug is already available on the file
+		// system.
+	case HTTP:
+		log.Printf("fetching slug URL %q", release.slugURL)
 
-	resp, err := http.Get(release.slugURL)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+		resp, err := http.Get(release.slugURL)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
 
-	out, err := os.Create("/tmp/slug.tgz")
-	if err != nil {
-		return err
-	}
-	defer out.Close()
+		out, err := os.Create("/tmp/slug.tgz")
+		if err != nil {
+			return err
+		}
+		defer out.Close()
 
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		return err
+		if _, err := io.Copy(out, resp.Body); err != nil {
+			return err
+		}
+
+		release.slugURL = "/tmp/slug.tgz"
 	}
 
 	return nil
@@ -101,8 +109,13 @@ func (dd *AbsPathDynoDriver) unpack(release *Release) error {
 		return nil
 	}
 
+	if release.Where() != Local {
+		panic("by unpack, expect release slugURL to be " +
+			"transmogrified to a local path")
+	}
+
 	cmd := exec.Command("tar", "-C", "/app", "--strip-components=2", "-zxf",
-		"/tmp/slug.tgz")
+		release.slugURL)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -113,8 +126,10 @@ func (dd *AbsPathDynoDriver) unpack(release *Release) error {
 }
 
 func (dd *AbsPathDynoDriver) Build(release *Release) (err error) {
-	if err = dd.fetch(release); err != nil {
-		return err
+	if release.Where() == HTTP {
+		if err = dd.fetch(release); err != nil {
+			return err
+		}
 	}
 
 	if err = dd.unpack(release); err != nil {

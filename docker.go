@@ -64,40 +64,24 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 	return nil, nil
 }
 
-func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (string, error) {
+func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (
+	string, error) {
+	// Exit early if the image is already around.
+	imageName := release.Name()
+	if _, err := d.c.InspectImage(imageName); err == nil {
+		// Successfully reuse the image that has -- probably
+		// -- been built before for the release in question.
+		// This avoids another long slug download, for
+		// instance.
+		return imageName, nil
+	}
+
 	t := time.Now()
 	inputBuf, outputBuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 	tr := tar.NewWriter(inputBuf)
 	defer tr.Close()
 
-	cd := ControlDir{Slug: release.slugURL}
-	genv := "HSUP_CONTROL_GOB=" + cd.textGob()
-	args := []string{"setuidgid", "app", "env", genv,
-		"/tmp/hsup", "-d", "abspath", "build", "-a", release.appName}
-	argText, err := json.Marshal(args)
-	if err != nil {
-		panic(fmt.Sprintln("could not marshal argv:", args))
-	}
-
-	dockerContents := fmt.Sprintf(`FROM %s
-RUN groupadd -r app && useradd -r -g app app
-RUN mkdir /app
-RUN chown app:app /app
-COPY hsup /tmp/hsup
-RUN chmod a+x /tmp/hsup
-RUN %s
-RUN rm /tmp/hsup
-WORKDIR /app
-`, si.image.ID, argText)
-
-	log.Println(dockerContents)
-	tr.WriteHeader(&tar.Header{
-		Name:    "Dockerfile",
-		Size:    int64(len(dockerContents)),
-		ModTime: t, AccessTime: t,
-		ChangeTime: t})
-	tr.Write([]byte(dockerContents))
-
+	var cd ControlDir
 	hsupBytes, err := ioutil.ReadFile(linuxAmd64Path())
 	if err != nil {
 		return "", err
@@ -109,17 +93,66 @@ WORKDIR /app
 		ModTime: t, AccessTime: t,
 		ChangeTime: t})
 	tr.Write([]byte(hsupBytes))
-	tr.Close()
 
-	imageName := release.Name()
+	isLocalTgz := false
+	switch release.Where() {
+	case Local:
+		// A local file with a gzipped tarball.  Make it
+		// available in the build.
+		isLocalTgz = true
+		slug, err := ioutil.ReadFile(release.slugURL)
+		if err != nil {
+			log.Fatalln("could not read slug",
+				release.slugURL+":", err)
+		}
 
-	if _, err = d.c.InspectImage(imageName); err == nil {
-		// Successfully reuse the image that has -- probably
-		// -- been built before for the release in question.
-		// This avoids another long slug download, for
-		// instance.
-		return imageName, nil
+		tr.WriteHeader(&tar.Header{
+			Name:    "slug.tgz",
+			Size:    int64(len(slug)),
+			ModTime: t, AccessTime: t,
+			ChangeTime: t})
+		tr.Write(slug)
+		cd = ControlDir{Slug: "/tmp/slug.tgz"}
+	case HTTP:
+		// Rely on abspath driver for the fetch.
+		cd = ControlDir{Slug: release.slugURL}
+	default:
+		panic("unenumerated slug location")
 	}
+
+	// Generate Dockerfile and place in archive.
+	genv := "HSUP_CONTROL_GOB=" + cd.textGob()
+	args := []string{"setuidgid", "app", "env", genv,
+		"/tmp/hsup", "-d", "abspath", "build", "-a", release.appName}
+	argText, err := json.Marshal(args)
+	if err != nil {
+		panic(fmt.Sprintln("could not marshal argv:", args))
+	}
+
+	copyText := ""
+	if isLocalTgz {
+		copyText = "COPY slug.tgz /tmp/slug.tgz"
+	}
+
+	dockerContents := fmt.Sprintf(`FROM %s
+RUN groupadd -r app && useradd -r -g app app && mkdir /app && chown app:app /app
+COPY hsup /tmp/hsup
+%s
+RUN chmod a+x /tmp/hsup && chmod a+r /tmp/slug.tgz
+RUN %s
+RUN rm /tmp/hsup
+WORKDIR /app
+`, si.image.ID, copyText, argText)
+
+	log.Println(dockerContents)
+	tr.WriteHeader(&tar.Header{
+		Name:    "Dockerfile",
+		Size:    int64(len(dockerContents)),
+		ModTime: t, AccessTime: t,
+		ChangeTime: t})
+	tr.Write([]byte(dockerContents))
+
+	tr.Close()
 
 	opts := docker.BuildImageOptions{
 		Name:           imageName,
