@@ -47,7 +47,7 @@ func newControlDir() interface{} {
 	return &ControlDir{}
 }
 
-func (dp *DirPoller) Poll() <-chan *Processes {
+func (dp *DirPoller) Notify() <-chan *Processes {
 	out := make(chan *Processes)
 	dp.c = newConf(newControlDir, dp.Dir)
 	go dp.pollSynchronous(out)
@@ -79,7 +79,7 @@ func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 	for {
 		var cd *ControlDir
 
-		newInfo, err := dp.c.Poll()
+		newInfo, err := dp.c.Notify()
 		if err != nil {
 			log.Println("Could not fetch new release information:",
 				err)
@@ -97,7 +97,7 @@ func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 	}
 }
 
-type GobPoller struct {
+type GobNotifier struct {
 	Dd      DynoDriver
 	AppName string
 	OneShot bool
@@ -118,16 +118,16 @@ func (cd *ControlDir) textGob() string {
 	return buf.String()
 }
 
-func (gp *GobPoller) Poll() <-chan *Processes {
+func (gn *GobNotifier) Notify() <-chan *Processes {
 	out := make(chan *Processes)
 	d := gob.NewDecoder(base64.NewDecoder(base64.StdEncoding,
-		strings.NewReader(gp.Payload)))
+		strings.NewReader(gn.Payload)))
 	cd := new(ControlDir)
 	if err := d.Decode(cd); err != nil {
 		panic("could not decode gob:" + err.Error())
 	}
 
-	procs := procsFromControlDir(cd, gp.AppName, gp.OneShot, gp.Dd)
+	procs := procsFromControlDir(cd, gn.AppName, gn.OneShot, gn.Dd)
 	go func() {
 		out <- procs
 	}()

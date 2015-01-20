@@ -70,7 +70,7 @@ func TestEmptyDB(t *testing.T) {
 	defer os.RemoveAll(name)
 
 	c := newConf(newControlDir, name)
-	updates, err := c.Poll()
+	updates, err := c.Notify()
 
 	if err != nil {
 		t.Fatalf("Poll on an empty directory should succeed, "+
@@ -81,7 +81,7 @@ func TestEmptyDB(t *testing.T) {
 		t.Fatal("Expect no updates for first poll in an empty database")
 	}
 
-	updates, err = c.Poll()
+	updates, err = c.Notify()
 	if err != nil {
 		t.Fatalf("Poll on an empty directory should succeed, "+
 			"instead failed: %v", err)
@@ -100,7 +100,7 @@ func TestColdStartLoaded(t *testing.T) {
 	ioutil.WriteFile(c.loadedPath(), []byte(defaultFixture.json), 0400)
 
 	// Expect a successful cold-start load.
-	update, err := c.Poll()
+	update, err := c.Notify()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestColdStartNew(t *testing.T) {
 	ioutil.WriteFile(c.newPath(), []byte(defaultFixture.json), 0400)
 
 	// Expect a successful cold-start load.
-	update, err := c.Poll()
+	update, err := c.Notify()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestLoadCycle(t *testing.T) {
 	ioutil.WriteFile(c.newPath(), []byte(defaultFixture.json), 0400)
 
 	// Expect a successful cold-start load.
-	update, err := c.Poll()
+	update, err := c.Notify()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestLoadCycle(t *testing.T) {
 	}
 
 	// Check no-op load.
-	update, err = c.Poll()
+	update, err = c.Notify()
 	if err != nil {
 		t.Fatal("Expect no error from no-op load")
 	}
@@ -196,7 +196,7 @@ func TestLoadCycle(t *testing.T) {
 	// Change configuration.
 	ioutil.WriteFile(c.newPath(), anotherFixture.json, 0400)
 
-	update, err = c.Poll()
+	update, err = c.Notify()
 	if err != nil {
 		t.Fatal()
 	}
@@ -214,7 +214,7 @@ func TestLoadCycle(t *testing.T) {
 	// Test errornous load.
 	ioutil.WriteFile(c.newPath(), []byte(`bogus json`), 0400)
 
-	update, err = c.Poll()
+	update, err = c.Notify()
 	if err != nil {
 		t.Fatal("Invalid input is not cause for an error, " +
 			"rather, the 'new' file is moved to 'reject'" +

@@ -93,7 +93,7 @@ func (c *conf) pollFirstTime() (newInfo bool, err error) {
 	return true, nil
 }
 
-func (c *conf) Poll() (newInfo bool, err error) {
+func (c *conf) Notify() (newInfo bool, err error) {
 	// Handle first execution on creation of the db instance.
 	if !c.beyondFirstTime {
 		newInfo, err = c.pollFirstTime()

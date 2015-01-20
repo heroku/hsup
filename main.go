@@ -25,8 +25,8 @@ func linuxAmd64Path() string {
 
 var ErrNoReleases = errors.New("No releases found")
 
-type Poller interface {
-	Poll() <-chan *Processes
+type Notifier interface {
+	Notify() <-chan *Processes
 }
 
 type Processes struct {
@@ -258,10 +258,10 @@ func main() {
 		log.Fatalln("could not initiate dyno driver:", err.Error())
 	}
 
-	var poller Poller
+	var poller Notifier
 	switch {
 	case controlGob != "":
-		poller = &GobPoller{
+		poller = &GobNotifier{
 			Dd:      dynoDriver,
 			AppName: *appName,
 			OneShot: *oneShot,
@@ -288,7 +288,7 @@ func main() {
 		panic("one of token or watch dir ought to have been defined")
 	}
 
-	procs := poller.Poll()
+	procs := poller.Notify()
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	var p *Processes

@@ -34,7 +34,7 @@ func (f *APIFormation) Type() string {
 // Listens for new releases by periodically polling the Heroku
 // API. When a new release is detected it is sent to the returned
 // channel.
-func (ap *APIPoller) Poll() <-chan *Processes {
+func (ap *APIPoller) Notify() <-chan *Processes {
 	out := make(chan *Processes)
 	go ap.pollSynchronous(out)
 	return out
