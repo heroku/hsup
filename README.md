@@ -41,8 +41,8 @@ Example using a directory:
 
 ```sh
 go install
-export CONTROL_DIR=/tmp/supctl
-mkdir -p "$CONTROL_DIR"
+export HSUP_CONTROL_DIR=/tmp/supctl
+mkdir -p "$HSUP_CONTROL_DIR"
 echo '{
     "Version": 1,
     "Env": {
@@ -61,10 +61,10 @@ echo '{
             "Type": "worker"
         }
     ]
-}' > "$CONTROL_DIR"/new
+}' > "$HSUP_CONTROL_DIR"/new
 hsup run '/usr/bin/printenv'
 
 # Note that after verifying the input, the file is moved to "loaded".
 # Writing new "new" files is how updates can be issued.
-ls "$CONTROL_DIR"
+ls "$HSUP_CONTROL_DIR"
 ```
