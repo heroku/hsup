@@ -152,6 +152,10 @@ WORKDIR /app
 		ChangeTime: t})
 	tr.Write([]byte(dockerContents))
 
+	if os.IsNotExist(err) {
+		log.Println("make a Linux binary: ./build/on_osx.sh")
+	}
+
 	tr.Close()
 
 	opts := docker.BuildImageOptions{

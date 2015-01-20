@@ -31,7 +31,7 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 
 	imageName, err := dd.d.BuildSlugImage(si, release)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("could not build image:", err)
 	}
 	log.Println("Built image successfully")
 
@@ -70,7 +70,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 		},
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("could not create container:", err)
 	}
 	ex.container = container
 
