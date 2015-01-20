@@ -129,20 +129,21 @@ func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (
 		panic(fmt.Sprintln("could not marshal argv:", args))
 	}
 
-	copyText := ""
+	var localSlugText string
 	if isLocalTgz {
-		copyText = "COPY slug.tgz /tmp/slug.tgz"
+		localSlugText = "COPY slug.tgz /tmp/slug.tgz\n" +
+			"RUN chmod a+r /tmp/slug.tgz"
+
 	}
 
 	dockerContents := fmt.Sprintf(`FROM %s
-RUN groupadd -r app && useradd -r -g app app && mkdir /app && chown app:app /app
 COPY hsup /tmp/hsup
+RUN groupadd -r app && useradd -r -g app app && mkdir /app && chown app:app /app && chmod a+x /tmp/hsup
 %s
-RUN chmod a+x /tmp/hsup && chmod a+r /tmp/slug.tgz
 RUN %s
 RUN rm /tmp/hsup
 WORKDIR /app
-`, si.image.ID, copyText, argText)
+`, si.image.ID, localSlugText, argText)
 
 	log.Println(dockerContents)
 	tr.WriteHeader(&tar.Header{
