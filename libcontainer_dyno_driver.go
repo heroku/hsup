@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"bytes"
@@ -69,7 +69,7 @@ func (cb *lcCallbacks) CreateCommand(container *libcontainer.Config, console,
 	dataPath, init string, pipe *os.File, args []string) *exec.Cmd {
 
 	ex := cb.ex
-	ex.cmd = exec.Command(os.Args[0], ex.args...)
+	ex.cmd = exec.Command(os.Args[0], ex.Args...)
 
 	ira := initReturnArgs{Container: container,
 		UncleanRootfs: cb.dd.NewRoot, ConsolePath: ""}
@@ -126,7 +126,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			os.Stdin, os.Stdout, os.Stderr, "", pwd, []string{},
 			cb.CreateCommand, cb.StartCallback)
 		log.Println(code, err)
-		ex.lcStatus <- &ExitStatus{code: code, err: err}
+		ex.lcStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.lcStatus)
 	}()
 
@@ -234,7 +234,7 @@ func (dd *LibContainerDynoDriver) lcconf(ex *Executor) *libcontainer.Config {
 		RootFs:   dd.NewRoot,
 		Hostname: dd.Hostname,
 		User:     "0:0",
-		Env:      ex.release.ConfigSlice(),
+		Env:      ex.Release.ConfigSlice(),
 		Namespaces: []libcontainer.Namespace{
 			{Type: "NEWIPC"},
 			{Type: "NEWNET"},
