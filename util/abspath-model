@@ -9,8 +9,8 @@ mkdir -p $NEWROOT
 sudo umount $NEWROOT/tmp || true
 sudo umount $NEWROOT/etc/resolv.conf || true
 sudo umount $NEWROOT/etc/passwd || true
-sudo umount $NEWROOT/dev/urandom || true
-sudo umount $NEWROOT/dev/null || true
+sudo unlink $NEWROOT/dev/urandom || true
+sudo unlink $NEWROOT/dev/null || true
 
 if ! [ -e "$CEDAR_LOCAL_TARBALL" ]; then
     curl "https://heroku-dan-bucket.s3.amazonaws.com/$CEDAR_TARBALL" > \
@@ -25,9 +25,11 @@ host_bind() {
     sudo mount --bind "$1" "$NEWROOT$1"
 }
 
+copy_device() {
+    sudo cp -a "$1" "$NEWROOT$1"
+}
+
 host_bind /etc/resolv.conf
 host_bind /etc/passwd
-touch "$NEWROOT/dev/urandom"
-host_bind /dev/urandom
-touch "$NEWROOT/dev/null"
-host_bind /dev/null
+copy_device /dev/urandom
+copy_device /dev/null
