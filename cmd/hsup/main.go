@@ -33,19 +33,13 @@ func statuses(p *hsup.Processes) <-chan []*hsup.ExitStatus {
 	return out
 }
 
-type Formation interface {
-	Args() []string
-	Quantity() int
-	Type() string
-}
-
 type ConcResolver interface {
-	Resolve(Formation) int
+	Resolve(hsup.Formation) int
 }
 
 type DefaultConcResolver struct{}
 
-func (cr DefaultConcResolver) Resolve(form Formation) int {
+func (cr DefaultConcResolver) Resolve(form hsup.Formation) int {
 	// By default, run only one of every process that has scale
 	// factors above zero.
 	if form.Quantity() > 0 {
@@ -84,7 +78,7 @@ func MustParseExplicitConcResolver(args []string) ExplicitConcResolver {
 	return ret
 }
 
-func (cr ExplicitConcResolver) Resolve(form Formation) int {
+func (cr ExplicitConcResolver) Resolve(form hsup.Formation) int {
 	return cr[form.Type()]
 }
 
