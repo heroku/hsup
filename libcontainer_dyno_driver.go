@@ -52,7 +52,7 @@ func (ira *initReturnArgs) Env() string {
 	return "HSUP_INITRETURN_DATA=" + buf.String()
 }
 
-func mustInit(irData string) (err error) {
+func MustInit(irData string) (err error) {
 	d := gob.NewDecoder(base64.NewDecoder(base64.StdEncoding,
 		strings.NewReader(irData)))
 	ira := new(initReturnArgs)
@@ -95,7 +95,7 @@ func (cb *lcCallbacks) StartCallback() {
 	close(cb.ex.waitStartup)
 }
 
-func (dd *LibContainerDynoDriver) envFill() {
+func (dd *LibContainerDynoDriver) EnvFill() {
 	appendPresent := func(name string) {
 		val := os.Getenv(name)
 		if val != "" {

@@ -243,7 +243,7 @@ func main() {
 		// "CreateCommand", so be sure to be done processing
 		// or storing them before executing.
 		log.Println("running InitReturns")
-		if err := mustInit(irData); err != nil {
+		if err := hsup.MustInit(irData); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -280,8 +280,8 @@ func main() {
 	// Inject information for delegation purposes to a
 	// LibContainerDynoDriver.
 	switch dd := dynoDriver.(type) {
-	case *LibContainerDynoDriver:
-		dd.envFill()
+	case *hsup.LibContainerDynoDriver:
+		dd.EnvFill()
 		dd.Args = args
 		dd.AppName = *appName
 		dd.Concurrency = *concurrency
