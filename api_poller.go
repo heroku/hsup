@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"github.com/cyberdelia/heroku-go/v3"
@@ -72,19 +72,19 @@ func (ap *APIPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
 	}
 
 	procs := Processes{
-		r: &Release{
+		Rel: &Release{
 			appName: ap.App,
 			config:  config,
 			slugURL: slug.Blob.URL,
 			version: rel.Version,
 		},
-		forms:   make([]Formation, len(hForms), len(hForms)),
-		dd:      ap.Dd,
+		Forms:   make([]Formation, len(hForms), len(hForms)),
+		Dd:      ap.Dd,
 		OneShot: ap.OneShot,
 	}
 
 	for i, hForm := range hForms {
-		procs.forms[i] = &APIFormation{h: hForm}
+		procs.Forms[i] = &APIFormation{h: hForm}
 	}
 
 	return &procs, nil

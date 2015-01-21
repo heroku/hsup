@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"encoding/json"
@@ -50,8 +50,8 @@ func (c *ControlAPI) ServeGET(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/status":
 		resp := StatusResponse{make(map[string]string)}
-		for _, e := range c.processes.executors {
-			resp.Processes[e.processType] = stateNames[e.state]
+		for _, e := range c.processes.Executors {
+			resp.Processes[e.ProcessType] = stateNames[e.State]
 		}
 		enc := json.NewEncoder(w)
 		w.Header().Set("Content-Type", "application/json")
@@ -72,8 +72,8 @@ func (c *ControlAPI) ServePOST(w http.ResponseWriter, r *http.Request) {
 		}
 		stopped := []string{}
 		for _, p := range stop.Processes {
-			for _, e := range c.processes.executors {
-				if e.processType == p {
+			for _, e := range c.processes.Executors {
+				if e.ProcessType == p {
 					log.Printf("Retiring %s", p)
 					e.Trigger(Retire)
 					stopped = append(stopped, p)

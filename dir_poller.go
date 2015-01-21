@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"bytes"
@@ -57,19 +57,19 @@ func (dp *DirPoller) Notify() <-chan *Processes {
 func procsFromControlDir(cd *ControlDir, app string, oneShot bool,
 	dd DynoDriver) *Processes {
 	procs := &Processes{
-		r: &Release{
+		Rel: &Release{
 			appName: app,
 			config:  cd.Env,
 			slugURL: cd.Slug,
 			version: cd.Version,
 		},
-		forms:   make([]Formation, len(cd.Processes)),
-		dd:      dd,
+		Forms:   make([]Formation, len(cd.Processes)),
+		Dd:      dd,
 		OneShot: oneShot,
 	}
 
 	for i := range cd.Processes {
-		procs.forms[i] = &cd.Processes[i]
+		procs.Forms[i] = &cd.Processes[i]
 	}
 
 	return procs

@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"fmt"

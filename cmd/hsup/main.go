@@ -1,55 +1,31 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/cyberdelia/heroku-go/v3"
+	"github.com/fdr/hsup"
 	flag "github.com/ogier/pflag"
 )
 
-func linuxAmd64Path() string {
-	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
-		return os.Args[0]
-	}
-
-	return os.Args[0] + "-linux-amd64"
-}
-
-var ErrNoReleases = errors.New("No releases found")
-
-type Notifier interface {
-	Notify() <-chan *Processes
-}
-
-type Processes struct {
-	r     *Release
-	forms []Formation
-
-	dd        DynoDriver
-	OneShot   bool
-	executors []*Executor
-}
-
-func statuses(p *Processes) <-chan []*ExitStatus {
+func statuses(p *hsup.Processes) <-chan []*hsup.ExitStatus {
 	if p == nil || !p.OneShot {
 		return nil
 	}
 
-	out := make(chan []*ExitStatus)
+	out := make(chan []*hsup.ExitStatus)
 
 	go func() {
-		statuses := make([]*ExitStatus, len(p.executors))
-		for i, executor := range p.executors {
+		statuses := make([]*hsup.ExitStatus, len(p.Executors))
+		for i, executor := range p.Executors {
 			log.Println("Got a status")
-			statuses[i] = <-executor.status
+			statuses[i] = <-executor.Status
 		}
 		out <- statuses
 	}()
@@ -112,16 +88,16 @@ func (cr ExplicitConcResolver) Resolve(form Formation) int {
 	return cr[form.Type()]
 }
 
-func (p *Processes) start(command string, args []string, concurrency int,
+func start(p *hsup.Processes, command string, args []string, concurrency int,
 	startNumber int) (
 	err error) {
 	if os.Getenv("HSUP_SKIP_BUILD") != "TRUE" {
-		err = p.dd.Build(p.r)
+		err = p.Dd.Build(p.Rel)
 	}
 
 	if err != nil {
 		log.Printf("hsup could not bake image for release %s: %s",
-			p.r.Name(), err.Error())
+			p.Rel.Name(), err.Error())
 		return err
 	}
 
@@ -135,29 +111,29 @@ func (p *Processes) start(command string, args []string, concurrency int,
 			cr = MustParseExplicitConcResolver(args)
 		}
 
-		for _, form := range p.forms {
+		for _, form := range p.Forms {
 			conc := cr.Resolve(form)
 			log.Printf("formation quantity=%v type=%v\n",
 				conc, form.Type())
 			for i := 0; i < conc; i++ {
 				lpid := strconv.Itoa(i + startNumber)
-				executor := &Executor{
-					args:        form.Args(),
-					dynoDriver:  p.dd,
-					processID:   lpid,
-					processType: form.Type(),
-					release:     p.r,
-					complete:    make(chan struct{}),
-					state:       Stopped,
+				executor := &hsup.Executor{
+					Args:        form.Args(),
+					DynoDriver:  p.Dd,
+					ProcessID:   lpid,
+					ProcessType: form.Type(),
+					Release:     p.Rel,
+					Complete:    make(chan struct{}),
+					State:       hsup.Stopped,
 					OneShot:     p.OneShot,
-					newInput:    make(chan DynoInput),
+					NewInput:    make(chan hsup.DynoInput),
 				}
 
 				if executor.OneShot {
-					executor.status = make(chan *ExitStatus)
+					executor.Status = make(chan *hsup.ExitStatus)
 				}
 
-				p.executors = append(p.executors, executor)
+				p.Executors = append(p.Executors, executor)
 			}
 		}
 	case "run":
@@ -165,25 +141,25 @@ func (p *Processes) start(command string, args []string, concurrency int,
 		conc := getConcurrency(concurrency, 1)
 		for i := 0; i < conc; i++ {
 			lpid := strconv.Itoa(i + startNumber)
-			executor := &Executor{
-				args:        args,
-				dynoDriver:  p.dd,
-				processID:   lpid,
-				processType: "run",
-				release:     p.r,
-				complete:    make(chan struct{}),
-				state:       Stopped,
+			executor := &hsup.Executor{
+				Args:        args,
+				DynoDriver:  p.Dd,
+				ProcessID:   lpid,
+				ProcessType: "run",
+				Release:     p.Rel,
+				Complete:    make(chan struct{}),
+				State:       hsup.Stopped,
 				OneShot:     true,
-				status:      make(chan *ExitStatus),
-				newInput:    make(chan DynoInput),
+				Status:      make(chan *hsup.ExitStatus),
+				NewInput:    make(chan hsup.DynoInput),
 			}
-			p.executors = append(p.executors, executor)
+			p.Executors = append(p.Executors, executor)
 		}
 	case "build":
 		p.OneShot = true
 	}
 
-	p.startParallel()
+	startParallel(p)
 	return nil
 }
 
@@ -253,15 +229,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	dynoDriver, err := FindDynoDriver(*dynoDriverName)
+	dynoDriver, err := hsup.FindDynoDriver(*dynoDriverName)
 	if err != nil {
 		log.Fatalln("could not initiate dyno driver:", err.Error())
 	}
 
-	var poller Notifier
+	var poller hsup.Notifier
 	switch {
 	case controlGob != "":
-		poller = &GobNotifier{
+		poller = &hsup.GobNotifier{
 			Dd:      dynoDriver,
 			AppName: *appName,
 			OneShot: *oneShot,
@@ -271,14 +247,14 @@ func main() {
 		heroku.DefaultTransport.Username = ""
 		heroku.DefaultTransport.Password = token
 		cl := heroku.NewService(heroku.DefaultClient)
-		poller = &APIPoller{
+		poller = &hsup.APIPoller{
 			Cl:      cl,
 			App:     *appName,
 			Dd:      dynoDriver,
 			OneShot: *oneShot,
 		}
 	case controlDir != "":
-		poller = &DirPoller{
+		poller = &hsup.DirPoller{
 			Dd:      dynoDriver,
 			Dir:     controlDir,
 			AppName: *appName,
@@ -291,20 +267,20 @@ func main() {
 	procs := poller.Notify()
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	var p *Processes
+	var p *hsup.Processes
 
 	if *controlPort != -1 {
-		procs = StartControlAPI(*controlPort, procs)
+		procs = hsup.StartControlAPI(*controlPort, procs)
 	}
 
 	for {
 		select {
 		case newProcs := <-procs:
 			if p != nil {
-				p.stopParallel()
+				stopParallel(p)
 			}
 			p = newProcs
-			err = p.start(args[0], args[1:], *concurrency,
+			err = start(p, args[0], args[1:], *concurrency,
 				*startNumber)
 			if err != nil {
 				log.Fatalln("could not start process:", err)
@@ -312,18 +288,18 @@ func main() {
 		case statv := <-statuses(p):
 			exitVal := 0
 			for i, s := range statv {
-				eName := p.executors[i].Name()
-				if s.err != nil {
+				eName := p.Executors[i].Name()
+				if s.Err != nil {
 					log.Printf("could not execute %s: %s",
-						eName, s.err.Error())
+						eName, s.Err.Error())
 					if 255 > exitVal {
 						exitVal = 255
 					}
 				} else {
 					log.Println(eName, "exits with code:",
-						s.code)
-					if s.code > exitVal {
-						exitVal = s.code
+						s.Code)
+					if s.Code > exitVal {
+						exitVal = s.Code
 					}
 				}
 				os.Exit(exitVal)
@@ -332,19 +308,19 @@ func main() {
 		case sig := <-signals:
 			log.Println("hsup caught a deadly signal:", sig)
 			if p != nil {
-				p.stopParallel()
+				stopParallel(p)
 			}
 			os.Exit(1)
 		}
 	}
 }
 
-func (p *Processes) startParallel() {
-	for _, executor := range p.executors {
-		go func(executor *Executor) {
-			go executor.Trigger(StayStarted)
+func startParallel(p *hsup.Processes) {
+	for _, executor := range p.Executors {
+		go func(executor *hsup.Executor) {
+			go executor.Trigger(hsup.StayStarted)
 			log.Println("Beginning Tickloop for", executor.Name())
-			for executor.Tick() != ErrExecutorComplete {
+			for executor.Tick() != hsup.ErrExecutorComplete {
 			}
 			log.Println("Executor completes", executor.Name())
 		}(executor)
@@ -352,16 +328,16 @@ func (p *Processes) startParallel() {
 }
 
 // Docker containers shut down slowly, so parallelize this operation
-func (p *Processes) stopParallel() {
+func stopParallel(p *hsup.Processes) {
 	log.Println("stopping everything")
 
-	for _, executor := range p.executors {
-		go func(executor *Executor) {
-			go executor.Trigger(Retire)
+	for _, executor := range p.Executors {
+		go func(executor *hsup.Executor) {
+			go executor.Trigger(hsup.Retire)
 		}(executor)
 	}
 
-	for _, executor := range p.executors {
-		<-executor.complete
+	for _, executor := range p.Executors {
+		<-executor.Complete
 	}
 }

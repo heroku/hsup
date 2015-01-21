@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"fmt"
@@ -41,13 +41,13 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 
 func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	cd := ControlDir{
-		Version: ex.release.version,
-		Env:     ex.release.config,
+		Version: ex.Release.version,
+		Env:     ex.Release.config,
 		Processes: []DirFormation{
 			{
-				FArgs:     ex.args,
+				FArgs:     ex.Args,
 				FQuantity: 1,
-				FType:     ex.processType,
+				FType:     ex.ProcessType,
 			},
 		},
 	}
@@ -60,12 +60,12 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 		Config: &docker.Config{
 			Cmd: []string{"setuidgid", "app",
 				"/hsup", "-d", "abspath", "-a",
-				ex.release.appName, "--oneshot",
-				"--start-number=" + ex.processID,
-				"start", ex.processType},
+				ex.Release.appName, "--oneshot",
+				"--start-number=" + ex.ProcessID,
+				"start", ex.ProcessType},
 			Env: []string{"HSUP_SKIP_BUILD=TRUE",
 				"HSUP_CONTROL_GOB=" + cd.textGob()},
-			Image:   ex.release.imageName,
+			Image:   ex.Release.imageName,
 			Volumes: map[string]struct{}{"/hsup": {}},
 		},
 	})
@@ -99,7 +99,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 
 func (dd *DockerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 	code, err := dd.d.c.WaitContainer(ex.container.ID)
-	return &ExitStatus{code: code, err: err}
+	return &ExitStatus{Code: code, Err: err}
 }
 
 func (dd *DockerDynoDriver) Stop(ex *Executor) error {

@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"errors"
@@ -145,7 +145,7 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 		return err
 	}
 
-	args := pr.Args(ex.args)
+	args := pr.Args(ex.Args)
 	ex.cmd = exec.Command(args[0], args[1:]...)
 
 	ex.cmd.Stdin = os.Stdin
@@ -159,7 +159,7 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 		"/usr/sbin:/usr/bin:/sbin:/bin",
 		"HOME=/app", "DYNO=" + ex.Name(), "PORT=5000"}
 
-	for k, v := range ex.release.config {
+	for k, v := range ex.Release.config {
 		ex.cmd.Env = append(ex.cmd.Env, k+"="+v)
 	}
 
@@ -181,13 +181,13 @@ func (dd *AbsPathDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 	if err != nil {
 		if eErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := eErr.Sys().(syscall.WaitStatus); ok {
-				s.code = status.ExitStatus()
+				s.Code = status.ExitStatus()
 			}
 		} else {
 			// Non ExitErrors are propagated: they are
 			// liable to be errors in starting the
 			// process.
-			s.err = err
+			s.Err = err
 		}
 	}
 

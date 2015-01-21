@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"log"
@@ -16,14 +16,14 @@ func (dd *SimpleDynoDriver) Build(release *Release) error {
 }
 
 func (dd *SimpleDynoDriver) Start(ex *Executor) error {
-	ex.cmd = exec.Command(ex.args[0], ex.args[1:]...)
+	ex.cmd = exec.Command(ex.Args[0], ex.Args[1:]...)
 
 	ex.cmd.Stdin = os.Stdin
 	ex.cmd.Stdout = os.Stdout
 	ex.cmd.Stderr = os.Stderr
 
 	// Fill environment vector from Heroku configuration.
-	for k, v := range ex.release.config {
+	for k, v := range ex.Release.config {
 		ex.cmd.Env = append(ex.cmd.Env, k+"="+v)
 	}
 
@@ -44,13 +44,13 @@ func (dd *SimpleDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 	if err != nil {
 		if eErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := eErr.Sys().(syscall.WaitStatus); ok {
-				s.code = status.ExitStatus()
+				s.Code = status.ExitStatus()
 			}
 		} else {
 			// Non ExitErrors are propagated: they are
 			// liable to be errors in starting the
 			// process.
-			s.err = err
+			s.Err = err
 		}
 	}
 

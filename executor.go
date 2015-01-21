@@ -1,4 +1,4 @@
-package main
+package hsup
 
 import (
 	"errors"
@@ -30,13 +30,13 @@ const (
 var ErrExecutorComplete = errors.New("Executor complete")
 
 type Executor struct {
-	args        []string
-	dynoDriver  DynoDriver
-	release     *Release
-	processID   string
-	processType string
-	status      chan *ExitStatus
-	complete    chan struct{}
+	Args        []string
+	DynoDriver  DynoDriver
+	Release     *Release
+	ProcessID   string
+	ProcessType string
+	Status      chan *ExitStatus
+	Complete    chan struct{}
 
 	// simple dyno driver properties
 	cmd     *exec.Cmd
@@ -47,34 +47,34 @@ type Executor struct {
 
 	// FSM Fields
 	OneShot  bool
-	state    DynoState
-	newInput chan DynoInput
+	State    DynoState
+	NewInput chan DynoInput
 }
 
 func (e *Executor) Trigger(input DynoInput) {
 	log.Println("triggering", input)
 	select {
-	case e.newInput <- input:
-	case <-e.complete:
+	case e.NewInput <- input:
+	case <-e.Complete:
 	}
 }
 
 func (e *Executor) wait() {
-	if s := e.dynoDriver.Wait(e); e.status != nil {
-		log.Println("Executor exits:", e.Name(), "exit code:", s.code)
-		e.status <- s
+	if s := e.DynoDriver.Wait(e); e.Status != nil {
+		log.Println("Executor exits:", e.Name(), "exit code:", s.Code)
+		e.Status <- s
 	}
 	e.Trigger(Exited)
 }
 
 func (e *Executor) Tick() (err error) {
-	log.Println(e.Name(), "waiting for tick...", e.state)
-	input := <-e.newInput
+	log.Println(e.Name(), "waiting for tick...", e.State)
+	input := <-e.NewInput
 	log.Println(e.Name(), "ticking with input", input)
 
 	start := func() error {
 		log.Printf("%v: starting\n", e.Name())
-		if err = e.dynoDriver.Start(e); err != nil {
+		if err = e.DynoDriver.Start(e); err != nil {
 			log.Printf("%v: start fails: %v", e.Name(), err)
 			if e.OneShot {
 				go e.Trigger(Retire)
@@ -85,31 +85,31 @@ func (e *Executor) Tick() (err error) {
 		}
 
 		log.Printf("%v: started\n", e.Name())
-		e.state = Started
+		e.State = Started
 		go e.wait()
 		return nil
 	}
 
 again:
-	switch e.state {
+	switch e.State {
 	case Retired:
-		close(e.complete)
+		close(e.Complete)
 		return ErrExecutorComplete
 	case Retiring:
-		if err = e.dynoDriver.Stop(e); err != nil {
+		if err = e.DynoDriver.Stop(e); err != nil {
 			return err
 		}
 
-		e.state = Retired
+		e.State = Retired
 		goto again
 	case Stopped:
 		switch input {
 		case Retire:
-			e.state = Retired
+			e.State = Retired
 			goto again
 		case Exited:
 			if e.OneShot {
-				e.state = Retired
+				e.State = Retired
 				goto again
 			}
 
@@ -124,13 +124,13 @@ again:
 	case Started:
 		switch input {
 		case Retire:
-			e.state = Retiring
+			e.State = Retiring
 			goto again
 		case Exited:
-			e.state = Stopped
+			e.State = Stopped
 			goto again
 		case Restart:
-			if err = e.dynoDriver.Stop(e); err != nil {
+			if err = e.DynoDriver.Stop(e); err != nil {
 				return err
 			}
 			goto again
@@ -138,10 +138,10 @@ again:
 			panic(fmt.Sprintln("Invalid input", input))
 		}
 	default:
-		panic(fmt.Sprintln("Invalid state", e.state))
+		panic(fmt.Sprintln("Invalid state", e.State))
 	}
 }
 
 func (e *Executor) Name() string {
-	return e.processType + "." + e.processID
+	return e.ProcessType + "." + e.ProcessID
 }
