@@ -1,11 +1,7 @@
 package hsup
 
 import (
-	"bytes"
-	"encoding/base64"
-	"encoding/gob"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -19,32 +15,8 @@ type DirPoller struct {
 	lastReleaseID string
 }
 
-type ControlDir struct {
-	Version   int
-	Env       map[string]string
-	Slug      string
-	Processes []DirFormation
-}
-
-type DirFormation struct {
-	FArgs     []string `json:"Args"`
-	FQuantity int      `json:"Quantity"`
-	FType     string   `json:"Type"`
-}
-
-func (f *DirFormation) Args() []string {
-	return f.FArgs
-}
-func (f *DirFormation) Quantity() int {
-	return f.FQuantity
-}
-
-func (f *DirFormation) Type() string {
-	return f.FType
-}
-
 func newControlDir() interface{} {
-	return &ControlDir{}
+	return &AppSerializable{}
 }
 
 func (dp *DirPoller) Notify() <-chan *Processes {
@@ -54,30 +26,9 @@ func (dp *DirPoller) Notify() <-chan *Processes {
 	return out
 }
 
-func procsFromControlDir(cd *ControlDir, app string, oneShot bool,
-	dd DynoDriver) *Processes {
-	procs := &Processes{
-		Rel: &Release{
-			appName: app,
-			config:  cd.Env,
-			slugURL: cd.Slug,
-			version: cd.Version,
-		},
-		Forms:   make([]Formation, len(cd.Processes)),
-		Dd:      dd,
-		OneShot: oneShot,
-	}
-
-	for i := range cd.Processes {
-		procs.Forms[i] = &cd.Processes[i]
-	}
-
-	return procs
-}
-
 func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 	for {
-		var cd *ControlDir
+		var as *AppSerializable
 
 		newInfo, err := dp.c.Notify()
 		if err != nil {
@@ -90,47 +41,9 @@ func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 			goto wait
 		}
 
-		cd = dp.c.Snapshot().(*ControlDir)
-		out <- procsFromControlDir(cd, dp.AppName, dp.OneShot, dp.Dd)
+		as = dp.c.Snapshot().(*AppSerializable)
+		out <- as.Procs(dp.AppName, dp.Dd, dp.OneShot)
 	wait:
 		time.Sleep(10 * time.Second)
 	}
-}
-
-type GobNotifier struct {
-	Dd      DynoDriver
-	AppName string
-	OneShot bool
-
-	Payload string
-}
-
-func (cd *ControlDir) textGob() string {
-	buf := bytes.Buffer{}
-	b64enc := base64.NewEncoder(base64.StdEncoding, &buf)
-	enc := gob.NewEncoder(b64enc)
-	err := enc.Encode(cd)
-	b64enc.Close()
-	if err != nil {
-		panic("could not encode gob:" + err.Error())
-	}
-
-	return buf.String()
-}
-
-func (gn *GobNotifier) Notify() <-chan *Processes {
-	out := make(chan *Processes)
-	d := gob.NewDecoder(base64.NewDecoder(base64.StdEncoding,
-		strings.NewReader(gn.Payload)))
-	cd := new(ControlDir)
-	if err := d.Decode(cd); err != nil {
-		panic("could not decode gob:" + err.Error())
-	}
-
-	procs := procsFromControlDir(cd, gn.AppName, gn.OneShot, gn.Dd)
-	go func() {
-		out <- procs
-	}()
-
-	return out
 }

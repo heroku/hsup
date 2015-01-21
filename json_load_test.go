@@ -110,10 +110,10 @@ func TestColdStartLoaded(t *testing.T) {
 	}
 
 	// Check Unmarshal contents.
-	db := *c.Snapshot().(*ControlDir)
-	expect := fmt.Sprintf("%+v", db)
-	if expect != defaultFixture.repr {
-		t.Fatal(expect)
+	db := *c.Snapshot().(*AppSerializable)
+	result := fmt.Sprintf("%+v", db)
+	if result != defaultFixture.repr {
+		t.Fatalf("\nExpect %v\nResult %v", defaultFixture.repr, result)
 	}
 }
 
@@ -144,7 +144,7 @@ func TestColdStartNew(t *testing.T) {
 	}
 
 	// Check Unmarshal contents.
-	db := *c.Snapshot().(*ControlDir)
+	db := *c.Snapshot().(*AppSerializable)
 	if fmt.Sprintf("%+v", db) != defaultFixture.repr {
 		t.Fatal()
 	}
@@ -177,7 +177,7 @@ func TestLoadCycle(t *testing.T) {
 	}
 
 	// Check Unmarshal contents.
-	db := *c.Snapshot().(*ControlDir)
+	db := *c.Snapshot().(*AppSerializable)
 	expected := fmt.Sprintf("%+v", db)
 	if expected != defaultFixture.repr {
 		t.Fatal()
@@ -205,7 +205,7 @@ func TestLoadCycle(t *testing.T) {
 		t.Fatal("Expect update since 'new' file updated")
 	}
 
-	db = *c.Snapshot().(*ControlDir)
+	db = *c.Snapshot().(*AppSerializable)
 	expected = fmt.Sprintf("%+v", db)
 	if expected != anotherFixture.repr {
 		t.Fatal(expected)

@@ -40,10 +40,10 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 }
 
 func (dd *DockerDynoDriver) Start(ex *Executor) error {
-	cd := ControlDir{
+	as := AppSerializable{
 		Version: ex.Release.version,
 		Env:     ex.Release.config,
-		Processes: []DirFormation{
+		Processes: []FormationSerializable{
 			{
 				FArgs:     ex.Args,
 				FQuantity: 1,
@@ -64,7 +64,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 				"--start-number=" + ex.ProcessID,
 				"start", ex.ProcessType},
 			Env: []string{"HSUP_SKIP_BUILD=TRUE",
-				"HSUP_CONTROL_GOB=" + cd.textGob()},
+				"HSUP_CONTROL_GOB=" + as.ToBase64Gob()},
 			Image:   ex.Release.imageName,
 			Volumes: map[string]struct{}{"/hsup": {}},
 		},
