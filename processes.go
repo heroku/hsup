@@ -1,8 +1,9 @@
 package hsup
 
 import (
+	"bitbucket.org/kardianos/osext"
 	"errors"
-	"os"
+	"log"
 	"runtime"
 )
 
@@ -28,9 +29,14 @@ type Formation interface {
 }
 
 func linuxAmd64Path() string {
-	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
-		return os.Args[0]
+	exe, err := osext.Executable()
+	if err != nil {
+		log.Fatalf("could not locate own executable:", err)
 	}
 
-	return os.Args[0] + "-linux-amd64"
+	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		return exe
+	}
+
+	return exe + "-linux-amd64"
 }
