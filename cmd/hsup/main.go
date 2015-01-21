@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/cyberdelia/heroku-go/v3"
-	"github.com/fdr/hsup"
+	"github.com/heroku/hsup"
 	flag "github.com/ogier/pflag"
 )
 

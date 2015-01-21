@@ -6,4 +6,4 @@ set -e
 docker pull golang:1.4
 
 docker run -it --rm -v $GOPATH:/go -w /usr/src/myapp golang:1.4 \
-    /go/src/github.com/fdr/hsup/build/in_docker.sh
+    /go/src/github.com/heroku/hsup/build/in_docker.sh
