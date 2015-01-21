@@ -1,19 +1,20 @@
-#!/bin/sh
+#!/bin/bash
 set -uex
+PREFIX=${PREFIX:-tmp}
 CEDAR_TARBALL=cedar-14.4.1.tgz
-CEDAR_LOCAL_TARBALL="tmp/$CEDAR_TARBALL"
-NEWROOT="tmp/root"
-mkdir -p tmp/root
+CEDAR_LOCAL_TARBALL="$PREFIX/$CEDAR_TARBALL"
+NEWROOT="$PREFIX/root"
+mkdir -p $NEWROOT
 
-sudo umount tmp/root/tmp || true
-sudo umount tmp/root/etc/resolv.conf || true
-sudo umount tmp/root/etc/passwd || true
-sudo umount tmp/root/dev/urandom || true
-sudo umount tmp/root/dev/null || true
+sudo umount $NEWROOT/tmp || true
+sudo umount $NEWROOT/etc/resolv.conf || true
+sudo umount $NEWROOT/etc/passwd || true
+sudo umount $NEWROOT/dev/urandom || true
+sudo umount $NEWROOT/dev/null || true
 
 if ! [ -e "$CEDAR_LOCAL_TARBALL" ]; then
     curl "https://heroku-dan-bucket.s3.amazonaws.com/$CEDAR_TARBALL" > \
-	"tmp/$CEDAR_TARBALL"
+	"$CEDAR_LOCAL_TARBALL"
 fi
 
 tar -C "$NEWROOT" -zxf "$CEDAR_LOCAL_TARBALL"
