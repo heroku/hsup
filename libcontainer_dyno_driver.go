@@ -321,6 +321,7 @@ func containerConfig(
 				{
 					Type:        "bind",
 					Destination: "/app",
+					Writable:    true,
 					Source: filepath.Join(
 						dataPath,
 						"app",
@@ -329,6 +330,7 @@ func containerConfig(
 				{
 					Type:        "bind",
 					Destination: "/var/tmp",
+					Writable:    true,
 					Source: filepath.Join(
 						dataPath,
 						"var", "tmp",
@@ -336,6 +338,7 @@ func containerConfig(
 				},
 				{
 					Type:        "bind",
+					Writable:    false,
 					Destination: "/etc/resolv.conf",
 					Source:      "/etc/resolv.conf",
 				},

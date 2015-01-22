@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/htcat/htcat"
 	"gopkg.in/yaml.v2"
@@ -105,13 +106,22 @@ func (img *HerokuStackImage) mount() error {
 	}
 	log.Printf("Mounting stach image %q onto %q", imgFile, imgDir)
 	out, err := exec.Command(
-		"mount", "-o", "loop,nosuid,nodev,noatime,nodiratime,ro",
+		"mount", "-o", "loop,nosuid,nodev,noatime,nodiratime,rw",
 		imgFile, imgDir,
 	).CombinedOutput()
 	if err != nil {
 		log.Println(string(out))
+		return err
 	}
-	return err
+	if err := img.addMissingDirectories(); err != nil {
+		return err
+	}
+	return syscall.Mount("", imgDir, "", syscall.MS_REMOUNT|syscall.MS_RDONLY, "")
+
+}
+
+func (img *HerokuStackImage) addMissingDirectories() error {
+	return os.MkdirAll(filepath.Join(img.Dir(), "sys"), 0755)
 }
 
 func (img *HerokuStackImage) fetch() error {
