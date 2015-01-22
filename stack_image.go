@@ -12,9 +12,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/htcat/htcat"
 	"gopkg.in/yaml.v2"
@@ -95,14 +95,23 @@ func (img *HerokuStackImage) mount() error {
 			return err
 		}
 	}
+	if err := os.MkdirAll(imgDir, 0755); err != nil {
+		return err
+	}
 	if contents, err := ioutil.ReadDir(imgDir); err != nil {
 		return err
 	} else if len(contents) != 0 {
 		return nil // already mounted
 	}
-	var flags uintptr = syscall.MS_NOATIME | syscall.MS_NODIRATIME |
-		syscall.MS_NOSUID | syscall.MS_NODEV | syscall.MS_RDONLY
-	return syscall.Mount(imgFile, imgDir, "", flags, "")
+	log.Printf("Mounting stach image %q onto %q", imgFile, imgDir)
+	out, err := exec.Command(
+		"mount", "-o", "loop,nosuid,nodev,noatime,nodiratime,ro",
+		imgFile, imgDir,
+	).CombinedOutput()
+	if err != nil {
+		log.Println(string(out))
+	}
+	return err
 }
 
 func (img *HerokuStackImage) fetch() error {
