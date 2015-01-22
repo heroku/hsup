@@ -112,16 +112,17 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		configPipe:     cfgReader,
 	}
 	container := containerConfig(
-		containerUUID, dataPath, stackImagePath, ex.Release.ConfigSlice(),
+		containerUUID, dataPath, stackImagePath,
+		ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
 	go func() {
+		defer cfgWriter.Close()
 		encoder := gob.NewEncoder(cfgWriter)
 		if err := encoder.Encode(container); err != nil {
 			log.Fatal(err)
 		}
-		defer cfgWriter.Close()
 	}()
 
 	go func() {
@@ -242,8 +243,10 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 	var container libcontainer.Config
 	decoder := gob.NewDecoder(configPipe)
 	if err := decoder.Decode(&container); err != nil {
+		configPipe.Close()
 		return err
 	}
+	configPipe.Close()
 
 	dynoEnv := make(map[string]string, len(container.Env))
 	for _, entry := range container.Env {
