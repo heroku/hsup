@@ -31,10 +31,10 @@ export DOCKER_HOST=unix:///var/run/docker.sock
 export HEROKU_ACCESS_TOKEN=...
 
 # start default process types inside Docker
-hsup start -d docker -c 2 -a simple-brandur
+hsup start -d docker start -a simple-brandur
 
 # run command as subprocess
-hsup run -d simple -c 2 -a simple-brandur echo "hello"
+hsup run -d simple -a simple-brandur -- echo "hello"
 ```
 
 Example using a directory:
