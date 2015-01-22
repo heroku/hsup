@@ -200,7 +200,7 @@ func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
 	}
 	cmd := exec.Command(ctx.hsupBinaryPath,
 		"-d", "libcontainer-init", "-a", ctx.ex.Release.appName,
-		"--oneshot", "--start-number", ctx.ex.ProcessID,
+		"--oneshot", "--start-number="+ctx.ex.ProcessID,
 		"start", ctx.ex.ProcessType,
 	)
 	cmd.Env = []string{
@@ -265,7 +265,7 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 	}
 	args := []string{
 		"/tmp/hsup", "-d", "abspath", "-a", ex.Release.appName,
-		"--oneshot", "--start-number", ex.ProcessID,
+		"--oneshot", "--start-number=" + ex.ProcessID,
 		"start", ex.ProcessType,
 	}
 	container.Env = []string{
