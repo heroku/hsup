@@ -28,15 +28,16 @@ $ godep go build &&
 
 ## libcontainer driver
 
-This is currently in a non-working state with many bugs, but the
-general idea is to handle containerization and subsequent delegation
-to the "abspath" driver:
+It works (with a few caveats listed below), but requires `root` to be used:
 
 ```
-$ export HEROKU_ACCESS_TOKEN=[REDACTED]
-$ export HSUP_APP=[REDACTED]
-$ godep go build &&
-  sudo env HSUP_NEWROOT=tmp/root HSUP_HOSTNAME=whatever HSUP_USER=$(id -nu) \
-  "HEROKU_ACCESS_TOKEN=$HEROKU_ACCESS_TOKEN" \
-  ./hsup run printenv -d libcontainer -a "$HSUP_APP"
+$ godep go install ./... && sudo env HSUP_CONTROL_DIR=/tmp/hspctl \
+  hsup run -d libcontainer '/bin/bash'
 ```
+
+Caveats:
+
+* it must be build with `godep`
+* no support for local slugs
+* no privilege dropping, containers still run as root
+* no networking
