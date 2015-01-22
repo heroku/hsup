@@ -41,3 +41,4 @@ Caveats:
 * no support for local slugs
 * no privilege dropping, containers still run as root
 * no networking
+* container data is not being garbage collected yet
