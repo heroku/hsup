@@ -217,8 +217,6 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 
-	log.Println("Args:", args, "LLArgs:", os.Args)
-
 	if len(args) == 0 {
 		flag.Usage()
 		os.Exit(1)
