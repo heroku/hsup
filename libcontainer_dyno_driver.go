@@ -76,6 +76,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		appPath    = filepath.Join(dataPath, "app")
 		tmpPath    = filepath.Join(dataPath, "tmp")
 		varTmpPath = filepath.Join(dataPath, "var", "tmp")
+		rootFSPath = filepath.Join(dataPath, "root")
 	)
 	// TODO: chown to the unprivileged user
 	if err := os.MkdirAll(appPath, 0755); err != nil {
@@ -85,6 +86,23 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 	if err := os.MkdirAll(varTmpPath, 0755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(rootFSPath, 0755); err != nil {
+		return err
+	}
+
+	// bind mounts
+	if err := syscall.Mount(
+		stackImagePath, rootFSPath, "bind",
+		syscall.MS_RDONLY|syscall.MS_BIND, "",
+	); err != nil {
+		return err
+	}
+	if err := syscall.Mount(
+		tmpPath, filepath.Join(rootFSPath, "tmp"), "bind",
+		syscall.MS_BIND, "",
+	); err != nil {
 		return err
 	}
 
@@ -112,8 +130,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		configPipe:     cfgReader,
 	}
 	container := containerConfig(
-		containerUUID, dataPath, stackImagePath,
-		ex.Release.ConfigSlice(),
+		containerUUID, dataPath, rootFSPath, ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
@@ -126,6 +143,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}()
 
 	go func() {
+		// TODO: stop swallowing errors
 		code, err := namespaces.Exec(
 			container, os.Stdin, os.Stdout, os.Stderr,
 			console, dataPath, []string{},
@@ -293,11 +311,12 @@ func (dd *LibContainerInitDriver) Wait(*Executor) *ExitStatus {
 	return nil
 }
 
-func containerConfig(containerUUID, dataPath, stackImagePath string,
-	env []string) *libcontainer.Config {
-
+func containerConfig(
+	containerUUID, dataPath, rootFSPath string, env []string,
+) *libcontainer.Config {
 	return &libcontainer.Config{
 		MountConfig: &libcontainer.MountConfig{
+			PivotDir: "/tmp",
 			Mounts: []*mount.Mount{
 				{
 					Type:        "bind",
@@ -305,14 +324,6 @@ func containerConfig(containerUUID, dataPath, stackImagePath string,
 					Source: filepath.Join(
 						dataPath,
 						"app",
-					),
-				},
-				{
-					Type:        "bind",
-					Destination: "/tmp",
-					Source: filepath.Join(
-						dataPath,
-						"tmp",
 					),
 				},
 				{
@@ -379,7 +390,7 @@ func containerConfig(containerUUID, dataPath, stackImagePath string,
 				},
 			},
 		},
-		RootFs:   stackImagePath,
+		RootFs:   rootFSPath,
 		Hostname: containerUUID,
 		User:     "0:0",
 		Env:      env,
