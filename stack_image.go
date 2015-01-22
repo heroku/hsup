@@ -138,6 +138,7 @@ func (img *HerokuStackImage) fetch() error {
 		w := bufio.NewWriter(pw)
 		_, err := htcat.New(&client, u, 5).WriteTo(w)
 		dlResult <- err
+		w.Flush()
 	}()
 
 	r, err := gzip.NewReader(pr)
