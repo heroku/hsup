@@ -21,6 +21,7 @@ type Release struct {
 	appName string
 	config  map[string]string
 	slugURL string
+	stack   string
 	version int
 
 	// docker dyno driver properties

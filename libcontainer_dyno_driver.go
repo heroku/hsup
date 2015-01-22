@@ -1,15 +1,16 @@
 package hsup
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/gob"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
+
+	"code.google.com/p/go-uuid/uuid"
 
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/cgroups"
@@ -19,112 +20,116 @@ import (
 )
 
 type LibContainerDynoDriver struct {
-	// LibContainer specific state.
-	NewRoot, Hostname, User string
-
-	// Filled to construct an abspath-driver invocation of hsup.
-	AppName     string
-	Concurrency int
-	Args, Env   []string
+	workDir       string
+	stacksDir     string
+	containersDir string
 }
 
-type lcCallbacks struct {
-	ex *Executor
-	dd *LibContainerDynoDriver
-}
-
-type initReturnArgs struct {
-	Container     *libcontainer.Config
-	UncleanRootfs string
-	ConsolePath   string
-}
-
-func (ira *initReturnArgs) Env() string {
-	buf := bytes.Buffer{}
-	b64enc := base64.NewEncoder(base64.StdEncoding, &buf)
-	enc := gob.NewEncoder(b64enc)
-	err := enc.Encode(&ira)
-	b64enc.Close()
-	if err != nil {
-		panic("could not encode initReturnArgs gob")
+func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) {
+	var (
+		stacksDir     = filepath.Join(workDir, "stacks")
+		containersDir = filepath.Join(workDir, "containers")
+	)
+	if err := os.MkdirAll(stacksDir, 0755); err != nil {
+		return nil, err
 	}
-
-	return "HSUP_INITRETURN_DATA=" + buf.String()
-}
-
-func MustInit(irData string) (err error) {
-	d := gob.NewDecoder(base64.NewDecoder(base64.StdEncoding,
-		strings.NewReader(irData)))
-	ira := new(initReturnArgs)
-	if err = d.Decode(ira); err != nil {
-		panic("could not decode initReturnArgs")
+	if err := os.MkdirAll(containersDir, 0755); err != nil {
+		return nil, err
 	}
-	log.Printf("init cmd: %#+v", os.Args[1:])
-
-	return namespaces.Init(ira.Container, ira.UncleanRootfs,
-		ira.ConsolePath, os.NewFile(3, "pipe"), os.Args[1:])
-}
-
-func (cb *lcCallbacks) CreateCommand(container *libcontainer.Config, console,
-	dataPath, init string, pipe *os.File, args []string) *exec.Cmd {
-
-	ex := cb.ex
-	ex.cmd = exec.Command(os.Args[0], ex.Args...)
-
-	ira := initReturnArgs{Container: container,
-		UncleanRootfs: cb.dd.NewRoot, ConsolePath: ""}
-
-	// Set up abspath driver environment.
-	ex.cmd.Env = append([]string{ira.Env()}, cb.dd.Env...)
-
-	if ex.cmd.SysProcAttr == nil {
-		ex.cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	ex.cmd.SysProcAttr.Cloneflags = uintptr(
-		namespaces.GetNamespaceFlags(
-			container.Namespaces))
-
-	ex.cmd.SysProcAttr.Pdeathsig = syscall.SIGKILL
-	ex.cmd.ExtraFiles = []*os.File{pipe}
-
-	return ex.cmd
-}
-
-func (cb *lcCallbacks) StartCallback() {
-	log.Println("closing from StartCallback")
-	close(cb.ex.waitStartup)
-}
-
-func (dd *LibContainerDynoDriver) EnvFill() {
-	appendPresent := func(name string) {
-		val := os.Getenv(name)
-		if val != "" {
-			dd.Env = append(dd.Env, name+"="+val)
-		}
-	}
-	appendPresent("HEROKU_ACCESS_TOKEN")
-	appendPresent("CONTROL_DIR")
+	return &LibContainerDynoDriver{
+		workDir:       workDir,
+		stacksDir:     stacksDir,
+		containersDir: containersDir,
+	}, nil
 }
 
 func (dd *LibContainerDynoDriver) Build(release *Release) error {
+	stacks, err := HerokuStacksFromManifest(dd.stacksDir)
+	if err != nil {
+		return err
+	}
+	for _, stack := range stacks {
+		if strings.TrimSpace(stack.Name) != release.stack {
+			continue
+		}
+		if err := stack.mount(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
-	pwd, err := os.Getwd()
+	containerUUID := uuid.New()
+	ex.containerUUID = containerUUID
+	stackImagePath, err := CurrentStackImagePath(
+		dd.stacksDir, ex.Release.stack,
+	)
 	if err != nil {
 		return err
 	}
+	dataPath := filepath.Join(dd.containersDir, containerUUID)
+	if err := os.MkdirAll(dataPath, 0755); err != nil {
+		return err
+	}
+	var (
+		appPath    = filepath.Join(dataPath, "app")
+		tmpPath    = filepath.Join(dataPath, "tmp")
+		varTmpPath = filepath.Join(dataPath, "var", "tmp")
+	)
+	// TODO: chown to the unprivileged user
+	if err := os.MkdirAll(appPath, 0755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(tmpPath, 0755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(varTmpPath, 0755); err != nil {
+		return err
+	}
+
+	// TODO: inject /tmp/slug.tgz if local
+
+	where, err := filepath.Abs(linuxAmd64Path())
+	if err != nil {
+		return err
+	}
+	if err := copyFile(where, filepath.Join(tmpPath, "hsup"), 0755); err != nil {
+		return err
+	}
+
+	// TODO tty
+	console := ""
 
 	ex.lcStatus = make(chan *ExitStatus)
 	ex.waitStartup = make(chan struct{})
 	ex.waitWait = make(chan struct{})
-	cb := lcCallbacks{ex: ex, dd: dd}
+
+	cfgReader, cfgWriter, err := os.Pipe()
+	initCtx := &containerInit{
+		hsupBinaryPath: where,
+		ex:             ex,
+		configPipe:     cfgReader,
+	}
+	container := containerConfig(
+		containerUUID, dataPath, stackImagePath, ex.Release.ConfigSlice(),
+	)
+
+	// send config to the init process inside the container
+	go func() {
+		encoder := gob.NewEncoder(cfgWriter)
+		if err := encoder.Encode(container); err != nil {
+			log.Fatal(err)
+		}
+		defer cfgWriter.Close()
+	}()
 
 	go func() {
-		code, err := namespaces.Exec(dd.lcconf(ex),
-			os.Stdin, os.Stdout, os.Stderr, "", pwd, []string{},
-			cb.CreateCommand, cb.StartCallback)
+		code, err := namespaces.Exec(
+			container, os.Stdin, os.Stdout, os.Stderr,
+			console, dataPath, []string{},
+			initCtx.createCommand, initCtx.startCallback,
+		)
 		log.Println(code, err)
 		ex.lcStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.lcStatus)
@@ -136,10 +141,16 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 func (dd *LibContainerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 	s = <-ex.lcStatus
 	close(ex.waitWait)
+	go func() {
+		ex.waiting <- struct{}{}
+	}()
+
 	return s
 }
 
 func (dd *LibContainerDynoDriver) Stop(ex *Executor) error {
+	// TODO: just send a Stop() message to the container's init
+
 	<-ex.waitStartup
 	// Some caller already successfully got a return from "Wait",
 	// which means the process exited: nothing to do.
@@ -147,9 +158,7 @@ func (dd *LibContainerDynoDriver) Stop(ex *Executor) error {
 		return nil
 	}
 
-	<-ex.lcStatus
 	p := ex.cmd.Process
-
 	// Begin graceful shutdown via SIGTERM.
 	p.Signal(syscall.SIGTERM)
 
@@ -167,18 +176,154 @@ func (dd *LibContainerDynoDriver) Stop(ex *Executor) error {
 	}
 }
 
-func (dd *LibContainerDynoDriver) lcconf(ex *Executor) *libcontainer.Config {
-	lc := &libcontainer.Config{
+type containerInit struct {
+	hsupBinaryPath string
+	ex             *Executor
+	configPipe     *os.File
+}
+
+func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
+	dataPath, init string, controlPipe *os.File, args []string) *exec.Cmd {
+
+	state := AppSerializable{
+		Version: ctx.ex.Release.version,
+		Env:     ctx.ex.Release.config,
+		Slug:    ctx.ex.Release.slugURL,
+		Stack:   ctx.ex.Release.stack,
+		Processes: []FormationSerializable{
+			{
+				FArgs:     ctx.ex.Args,
+				FQuantity: 1,
+				FType:     ctx.ex.ProcessType,
+			},
+		},
+	}
+	cmd := exec.Command(ctx.hsupBinaryPath,
+		"-d", "libcontainer-init", "-a", ctx.ex.Release.appName,
+		"--oneshot", "--start-number", ctx.ex.ProcessID,
+		"start", ctx.ex.ProcessType,
+	)
+	cmd.Env = []string{
+		"HSUP_SKIP_BUILD=TRUE",
+		"HSUP_CONTROL_GOB=" + state.ToBase64Gob(),
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Cloneflags = uintptr(
+		namespaces.GetNamespaceFlags(container.Namespaces),
+	)
+	cmd.SysProcAttr.Pdeathsig = syscall.SIGKILL
+	cmd.ExtraFiles = []*os.File{controlPipe, ctx.configPipe}
+	ctx.ex.cmd = cmd
+	return cmd
+}
+
+func (ctx *containerInit) startCallback() {
+	//TODO: log("Starting process web.1 with command `...`")
+	close(ctx.ex.waitStartup)
+	//child process is already running, it's safe to close the parent's read
+	//side of the pipe
+	ctx.configPipe.Close()
+}
+
+type LibContainerInitDriver struct{}
+
+func (dd *LibContainerInitDriver) Build(*Release) error {
+	// noop
+	return nil
+}
+
+// Start acts as PID=1 inside a container spawned by libcontainer, doing the
+// required setup and re-exec'ing as the abspath driver
+// TODO: drop privileges (setuid)
+func (dd *LibContainerInitDriver) Start(ex *Executor) error {
+	configPipe := os.NewFile(4, "configPipe")
+	var container libcontainer.Config
+	decoder := gob.NewDecoder(configPipe)
+	if err := decoder.Decode(&container); err != nil {
+		return err
+	}
+
+	dynoEnv := make(map[string]string, len(container.Env))
+	for _, entry := range container.Env {
+		pieces := strings.SplitN(entry, "=", 2)
+		dynoEnv[pieces[0]] = pieces[1]
+	}
+	as := AppSerializable{
+		Version: ex.Release.version,
+		Env:     dynoEnv,
+		Slug:    ex.Release.slugURL,
+		Stack:   ex.Release.stack,
+		Processes: []FormationSerializable{
+			{
+				FArgs:     ex.Args,
+				FQuantity: 1,
+				FType:     ex.ProcessType,
+			},
+		},
+	}
+	args := []string{
+		"/tmp/hsup", "-d", "abspath", "-a", ex.Release.appName,
+		"--oneshot", "--start-number", ex.ProcessID,
+		"start", ex.ProcessType,
+	}
+	container.Env = []string{
+		"HSUP_SKIP_BUILD=TRUE",
+		"HSUP_CONTROL_GOB=" + as.ToBase64Gob(),
+	}
+	// TODO: clean up /tmp/hsup and /tmp/slug.tgz after abspath reads them
+	return namespaces.Init(
+		&container, container.RootFs, "",
+		os.NewFile(3, "controlPipe"), args,
+	)
+}
+
+func (dd *LibContainerInitDriver) Stop(*Executor) error {
+	panic("this should never be called")
+	return nil
+}
+
+func (dd *LibContainerInitDriver) Wait(*Executor) *ExitStatus {
+	// this should be unreachable, but in case it is called, sleep forever:
+	select {}
+	return nil
+}
+
+func containerConfig(containerUUID, dataPath, stackImagePath string,
+	env []string) *libcontainer.Config {
+
+	return &libcontainer.Config{
 		MountConfig: &libcontainer.MountConfig{
 			Mounts: []*mount.Mount{
 				{
-					Type:        "tmpfs",
-					Destination: "/tmp",
+					Type:        "bind",
+					Destination: "/app",
+					Source: filepath.Join(
+						dataPath,
+						"app",
+					),
 				},
 				{
 					Type:        "bind",
-					Source:      "/etc/resolv.conf",
+					Destination: "/tmp",
+					Source: filepath.Join(
+						dataPath,
+						"tmp",
+					),
+				},
+				{
+					Type:        "bind",
+					Destination: "/var/tmp",
+					Source: filepath.Join(
+						dataPath,
+						"var", "tmp",
+					),
+				},
+				{
+					Type:        "bind",
 					Destination: "/etc/resolv.conf",
+					Source:      "/etc/resolv.conf",
 				},
 			},
 			DeviceNodes: []*devices.Device{
@@ -231,10 +376,10 @@ func (dd *LibContainerDynoDriver) lcconf(ex *Executor) *libcontainer.Config {
 				},
 			},
 		},
-		RootFs:   dd.NewRoot,
-		Hostname: dd.Hostname,
+		RootFs:   stackImagePath,
+		Hostname: containerUUID,
 		User:     "0:0",
-		Env:      ex.Release.ConfigSlice(),
+		Env:      env,
 		Namespaces: []libcontainer.Namespace{
 			{Type: "NEWIPC"},
 			{Type: "NEWNET"},
@@ -263,17 +408,9 @@ func (dd *LibContainerDynoDriver) lcconf(ex *Executor) *libcontainer.Config {
 				Mtu:     1500,
 				Type:    "loopback",
 			},
-			{
-				Address:    "172.17.0.101/16",
-				Bridge:     "docker0",
-				Gateway:    "172.17.42.1",
-				Mtu:        1500,
-				Type:       "veth",
-				VethPrefix: "veth",
-			},
 		},
 		Cgroups: &cgroups.Cgroup{
-			Name: dd.Hostname,
+			Name: containerUUID,
 			AllowedDevices: []*devices.Device{
 				{
 					Type:              99,
@@ -375,6 +512,4 @@ func (dd *LibContainerDynoDriver) lcconf(ex *Executor) *libcontainer.Config {
 			},
 		},
 	}
-
-	return lc
 }

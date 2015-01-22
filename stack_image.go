@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -105,6 +106,7 @@ func (img *HerokuStackImage) mount() error {
 }
 
 func (img *HerokuStackImage) fetch() error {
+	log.Printf("Downloading stach image %q. This may take a while...", img.Name)
 	// TODO check md5
 	pr, pw := io.Pipe()
 	defer pr.Close()
@@ -147,5 +149,6 @@ func (img *HerokuStackImage) fetch() error {
 	if _, err := io.Copy(imageFile, r); err != nil {
 		return err
 	}
+	log.Println("Stack image download finished")
 	return <-dlResult
 }

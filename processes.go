@@ -1,10 +1,13 @@
 package hsup
 
 import (
-	"bitbucket.org/kardianos/osext"
 	"errors"
+	"io"
 	"log"
+	"os"
 	"runtime"
+
+	"bitbucket.org/kardianos/osext"
 )
 
 var ErrNoReleases = errors.New("No releases found")
@@ -39,4 +42,26 @@ func linuxAmd64Path() string {
 	}
 
 	return exe + "-linux-amd64"
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	r, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	w, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	if _, err := io.Copy(w, r); err != nil {
+		return err
+	}
+	if err := os.Chmod(dst, mode); err != nil {
+		return err
+	}
+	return nil
 }

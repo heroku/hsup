@@ -11,6 +11,7 @@ type AppSerializable struct {
 	Version   int
 	Env       map[string]string
 	Slug      string
+	Stack     string
 	Processes []FormationSerializable
 }
 
@@ -58,6 +59,7 @@ func (as *AppSerializable) Procs(appName string, dd DynoDriver, oneShot bool) *P
 			appName: appName,
 			config:  as.Env,
 			slugURL: as.Slug,
+			stack:   as.Stack,
 			version: as.Version,
 		},
 		Forms:   make([]Formation, len(as.Processes)),

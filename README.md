@@ -49,6 +49,7 @@ echo '{
         "NAME": "CONTENTS"
     },
     "Slug": "sample-slug.tgz",
+    "Stack": "cedar-14",
     "Processes": [
         {
             "Args": ["./web-server", "arg"],
