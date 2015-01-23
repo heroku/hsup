@@ -35,7 +35,7 @@ type Formation interface {
 func linuxAmd64Path() string {
 	exe, err := osext.Executable()
 	if err != nil {
-		log.Fatalf("could not locate own executable:", err)
+		log.Fatalf("could not locate own executable: %q", err.Error())
 	}
 
 	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
@@ -73,7 +73,10 @@ func copyFile(src, dst string, mode os.FileMode) (err error) {
 
 type combinedError []error
 
-func combine(errors ...error) combinedError {
+// combine needs to return error, not a combinedError, otherwise nil errors
+// aren't going to be treated as nil. More details:
+// http://golang.org/doc/faq#nil_error
+func combine(errors ...error) error {
 	errors = make(combinedError, 0, len(errors))
 	for _, err := range errors {
 		if err == nil {
@@ -81,13 +84,21 @@ func combine(errors ...error) combinedError {
 		}
 		errors = append(errors, err)
 	}
-	return errors
+	if len(errors) == 0 {
+		return nil // important so that callers can do if err == nil
+	}
+	return combinedError(errors)
 }
 
+// Error implements the error interface
 func (e combinedError) Error() string {
 	msgs := make([]string, len(e))
 	for i, entry := range e {
 		msgs[i] = entry.Error()
 	}
 	return strings.Join(msgs, " | ")
+}
+
+func (e combinedError) String() string {
+	return e.Error()
 }
