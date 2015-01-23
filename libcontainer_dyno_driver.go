@@ -94,16 +94,11 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 
-	// bind mounts
+	// stack image is the rootFS
+	// TODO: GC needs to umount this
 	if err := syscall.Mount(
 		stackImagePath, rootFSPath, "bind",
 		syscall.MS_RDONLY|syscall.MS_BIND, "",
-	); err != nil {
-		return err
-	}
-	if err := syscall.Mount(
-		tmpPath, filepath.Join(rootFSPath, "tmp"), "bind",
-		syscall.MS_BIND, "",
 	); err != nil {
 		return err
 	}
@@ -132,7 +127,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		configPipe:     cfgReader,
 	}
 	container := containerConfig(
-		containerUUID, dataPath, rootFSPath, ex.Release.ConfigSlice(),
+		containerUUID, dataPath, ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
@@ -314,7 +309,7 @@ func (dd *LibContainerInitDriver) Wait(*Executor) *ExitStatus {
 }
 
 func containerConfig(
-	containerUUID, dataPath, rootFSPath string, env []string,
+	containerUUID, dataPath string, env []string,
 ) *libcontainer.Config {
 	return &libcontainer.Config{
 		MountConfig: &libcontainer.MountConfig{
@@ -324,10 +319,13 @@ func containerConfig(
 					Type:        "bind",
 					Destination: "/app",
 					Writable:    true,
-					Source: filepath.Join(
-						dataPath,
-						"app",
-					),
+					Source:      filepath.Join(dataPath, "app"),
+				},
+				{
+					Type:        "bind",
+					Destination: "/tmp",
+					Writable:    true,
+					Source:      filepath.Join(dataPath, "tmp"),
 				},
 				{
 					Type:        "bind",
@@ -395,7 +393,7 @@ func containerConfig(
 				},
 			},
 		},
-		RootFs:   rootFSPath,
+		RootFs:   filepath.Join(dataPath, "root"),
 		Hostname: containerUUID,
 		User:     "0:0",
 		Env:      env,
