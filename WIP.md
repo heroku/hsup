@@ -42,3 +42,4 @@ Caveats:
 * no privilege dropping, containers still run as root
 * no networking
 * container data is not being garbage collected yet
+* libcontainerDriver.Stop() (probably) doesn't currently work
