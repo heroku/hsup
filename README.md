@@ -26,7 +26,7 @@ Where `COMMAND` is on one:
 Example:
 
 ``` sh
-go install
+godep go install ./...
 export DOCKER_HOST=unix:///var/run/docker.sock
 export HEROKU_ACCESS_TOKEN=...
 
@@ -40,7 +40,7 @@ hsup run -d simple -a simple-brandur -- echo "hello"
 Example using a directory:
 
 ```sh
-go install
+godep go install ./...
 export HSUP_CONTROL_DIR=/tmp/supctl
 mkdir -p "$HSUP_CONTROL_DIR"
 echo '{
