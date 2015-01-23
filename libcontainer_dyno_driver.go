@@ -313,7 +313,8 @@ func containerConfig(
 ) *libcontainer.Config {
 	return &libcontainer.Config{
 		MountConfig: &libcontainer.MountConfig{
-			PivotDir: "/tmp",
+			MountLabel: containerUUID,
+			PivotDir:   "/tmp",
 			Mounts: []*mount.Mount{
 				{
 					Type:        "bind",
