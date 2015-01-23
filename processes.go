@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strings"
 
 	"bitbucket.org/kardianos/osext"
 )
@@ -44,18 +45,22 @@ func linuxAmd64Path() string {
 	return exe + "-linux-amd64"
 }
 
-func copyFile(src, dst string, mode os.FileMode) error {
+func copyFile(src, dst string, mode os.FileMode) (err error) {
 	r, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() {
+		err = combine(err, r.Close())
+	}()
 
 	w, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer w.Close()
+	defer func() {
+		err = combine(err, w.Close())
+	}()
 
 	if _, err := io.Copy(w, r); err != nil {
 		return err
@@ -64,4 +69,25 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	return nil
+}
+
+type combinedError []error
+
+func combine(errors ...error) combinedError {
+	errors = make(combinedError, 0, len(errors))
+	for _, err := range errors {
+		if err == nil {
+			continue
+		}
+		errors = append(errors, err)
+	}
+	return errors
+}
+
+func (e combinedError) Error() string {
+	msgs := make([]string, len(e))
+	for i, entry := range e {
+		msgs[i] = entry.Error()
+	}
+	return strings.Join(msgs, " | ")
 }
