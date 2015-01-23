@@ -23,8 +23,20 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const HEROKU_STACKS_MANIFEST_URL = "https://s3.amazonaws.com/heroku_stacks_production/manifest.yml"
+const (
+	// currently available versions of Heroku stack images
+	HEROKU_STACKS_MANIFEST_URL = "https://s3.amazonaws.com/heroku_stacks_production/manifest.yml"
+)
 
+// HerokuStackImage models stack images as they are distributed by Heroku:
+// binary disk images, usually intended to be mounted on loopback devices.
+// The common use is to mount those images read-only, so a single immutable
+// image can be shared by multiple containers, saving disk space and memory
+// due to Linux CoW page sharing.
+//
+// Support for Heroku stack images is currently only enabled when building for
+// Linux, because these images are currently only used by the libcontainer
+// driver.
 type HerokuStackImage struct {
 	Name    string
 	Version string
@@ -88,6 +100,7 @@ func (img *HerokuStackImage) Filename() string {
 	return img.Dir() + ".img"
 }
 
+//TODO: avoid multiple processes trying to mount the same stack image
 func (img *HerokuStackImage) mount() error {
 	var (
 		imgFile = img.Filename()
@@ -122,10 +135,13 @@ func (img *HerokuStackImage) mount() error {
 
 }
 
+// addMissingDirectories is required until https://github.com/heroku/stack-images/pull/13
+// gets merged.
 func (img *HerokuStackImage) addMissingDirectories() error {
 	return os.MkdirAll(filepath.Join(img.Dir(), "sys"), 0755)
 }
 
+//TODO: avoid multiple processes trying to fetch the same stack image
 func (img *HerokuStackImage) fetch() error {
 	log.Printf("Downloading stach image %q. This may take a while...", img.Name)
 	// TODO check md5
