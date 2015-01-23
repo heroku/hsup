@@ -147,7 +147,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		code, err := namespaces.Exec(
 			container, os.Stdin, os.Stdout, os.Stderr,
 			console, dataPath, []string{},
-			initCtx.createCommand, initCtx.startCallback,
+			initCtx.createCommand, nil, initCtx.startCallback,
 		)
 		log.Println(code, err)
 		ex.lcStatus <- &ExitStatus{Code: code, Err: err}
