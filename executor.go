@@ -83,7 +83,7 @@ func (e *Executor) Tick() (err error) {
 	start := func() error {
 		log.Printf("%v: starting\n", e.Name())
 		if err = e.DynoDriver.Start(e); err != nil {
-			log.Printf("%v: start fails: %v", e.Name(), err)
+			log.Printf("%v: start fails: %q", e.Name(), err.Error())
 			if e.OneShot {
 				go e.Trigger(Retire)
 			} else {
