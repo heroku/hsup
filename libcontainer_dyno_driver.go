@@ -147,6 +147,27 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			initCtx.createCommand, nil, initCtx.startCallback,
 		)
 		log.Println(code, err)
+
+		// GC
+		// TODO: gc after sending back the exit status
+		// doing so right now terminates the program too early,
+		// before everything is removed
+		if err := syscall.Unmount(rootFSPath, 0); err != nil {
+			log.Printf("unmount error: %#+v", err)
+		}
+		if err := os.RemoveAll(appPath); err != nil {
+			log.Printf("remove all error: %#+v", err)
+		}
+		if err := os.RemoveAll(tmpPath); err != nil {
+			log.Printf("remove all error: %#+v", err)
+		}
+		if err := os.RemoveAll(varTmpPath); err != nil {
+			log.Printf("remove all error: %#+v", err)
+		}
+		if err := os.RemoveAll(dataPath); err != nil {
+			log.Printf("remove all error: %#+v", err)
+		}
+
 		ex.lcStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.lcStatus)
 	}()
