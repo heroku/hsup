@@ -1,3 +1,4 @@
+//go:generate stringer -type=DynoState,DynoInput
 package hsup
 
 import (

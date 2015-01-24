@@ -7,8 +7,6 @@ import (
 	"net/http"
 )
 
-var stateNames = map[DynoState]string{Stopped: "Starting", Started: "Started", Retiring: "Stopping", Retired: "Finished"}
-
 type StatusResponse struct {
 	Processes map[string]string
 }
@@ -51,7 +49,7 @@ func (c *ControlAPI) ServeGET(w http.ResponseWriter, r *http.Request) {
 	case "/status":
 		resp := StatusResponse{make(map[string]string)}
 		for _, e := range c.processes.Executors {
-			resp.Processes[e.ProcessType] = stateNames[e.State]
+			resp.Processes[e.ProcessType] = e.State.String()
 		}
 		enc := json.NewEncoder(w)
 		w.Header().Set("Content-Type", "application/json")
