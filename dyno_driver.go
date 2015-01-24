@@ -50,17 +50,3 @@ func (r *Release) Where() SlugWhere {
 		return Local
 	}
 }
-
-func FindDynoDriver(name string) (DynoDriver, error) {
-	switch name {
-	case "simple":
-		return &SimpleDynoDriver{}, nil
-	case "docker":
-		return &DockerDynoDriver{}, nil
-	case "abspath":
-		return &AbsPathDynoDriver{}, nil
-	default:
-		return nil, fmt.Errorf("could not locate driver. "+
-			"specified by the user: %v", name)
-	}
-}

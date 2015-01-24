@@ -33,6 +33,20 @@ func statuses(p *hsup.Processes) <-chan []*hsup.ExitStatus {
 	return out
 }
 
+func findDynoDriver(name string) (hsup.DynoDriver, error) {
+	switch name {
+	case "simple":
+		return &hsup.SimpleDynoDriver{}, nil
+	case "docker":
+		return &hsup.DockerDynoDriver{}, nil
+	case "abspath":
+		return &hsup.AbsPathDynoDriver{}, nil
+	default:
+		return nil, fmt.Errorf("could not locate driver. "+
+			"specified by the user: %v", name)
+	}
+}
+
 type ConcResolver interface {
 	Resolve(hsup.Formation) int
 }
@@ -223,7 +237,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	dynoDriver, err := hsup.FindDynoDriver(*dynoDriverName)
+	dynoDriver, err := findDynoDriver(*dynoDriverName)
 	if err != nil {
 		log.Fatalln("could not initiate dyno driver:", err.Error())
 	}
