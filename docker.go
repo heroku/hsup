@@ -154,7 +154,7 @@ WORKDIR /app
 	tr.Write([]byte(dockerContents))
 
 	if os.IsNotExist(err) {
-		log.Println("make a Linux binary: ./build/on_osx.sh")
+		log.Println("make a Linux binary: `make`")
 	}
 
 	tr.Close()
