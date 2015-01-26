@@ -7,14 +7,14 @@ SHELL = /bin/sh
 .PHONY: all clean deb docker-images
 
 # go build vars
-tempdir        := $(shell mktemp -d)
+tempdir        := $(shell mktemp -d 2>/dev/null || mktemp -d -t 'hsup.go')
 gopkg          := $(tempdir)/pkg
 gosrc          := src/github.com/heroku/hsup
 
 # deb build vars
 packagename    := hsup
 version        := 0.0.1
-buildpath      := $(shell mktemp -d)
+buildpath      := $(shell mktemp -d 2>/dev/null || mktemp -d -t 'hsup.deb')
 controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
 
