@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"fmt"
+
 	"github.com/fsouza/go-dockerclient"
 )
 
@@ -39,12 +40,18 @@ type Executor struct {
 	Status      chan *ExitStatus
 	Complete    chan struct{}
 
-	// simple dyno driver properties
+	// simple, abspath, and libcontainer dyno driver properties
 	cmd     *exec.Cmd
 	waiting chan struct{}
 
 	// docker dyno driver properties
 	container *docker.Container
+
+	// libcontainer dyno driver properties
+	lcStatus      chan *ExitStatus
+	waitStartup   chan struct{}
+	waitWait      chan struct{}
+	containerUUID string
 
 	// FSM Fields
 	OneShot  bool
@@ -76,7 +83,7 @@ func (e *Executor) Tick() (err error) {
 	start := func() error {
 		log.Printf("%v: starting\n", e.Name())
 		if err = e.DynoDriver.Start(e); err != nil {
-			log.Printf("%v: start fails: %v", e.Name(), err)
+			log.Printf("%v: start fails: %q", e.Name(), err.Error())
 			if e.OneShot {
 				go e.Trigger(Retire)
 			} else {

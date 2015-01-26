@@ -7,8 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
 	"path/filepath"
+
+	"github.com/fsouza/go-dockerclient"
 )
 
 type DockerDynoDriver struct {
@@ -20,6 +21,7 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 		return err
 	}
 
+	// TODO: map release.stack -> docker image name
 	stack := "heroku/cedar:14"
 	si, err := dd.d.StackStat(stack)
 	if err != nil {
@@ -43,6 +45,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	as := AppSerializable{
 		Version: ex.Release.version,
 		Env:     ex.Release.config,
+		Stack:   ex.Release.stack,
 		Processes: []FormationSerializable{
 			{
 				FArgs:     ex.Args,

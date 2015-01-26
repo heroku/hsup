@@ -25,3 +25,21 @@ $ godep go build &&
     "HEROKU_ACCESS_TOKEN=$HEROKU_ACCESS_TOKEN" \
     /hsup run printenv -d abspath -a "$HSUP_APP"
 ```
+
+## libcontainer driver
+
+It works (with a few caveats listed below), but requires `root` to be used:
+
+```
+$ godep go install ./... && sudo env HSUP_CONTROL_DIR=/tmp/hspctl \
+  hsup run -d libcontainer '/bin/bash'
+```
+
+Caveats:
+
+* it must be build with `godep`
+* no support for local slugs
+* no privilege dropping, containers still run as root
+* no networking
+* container data is not being garbage collected yet
+* libcontainerDriver.Stop() (probably) doesn't currently work

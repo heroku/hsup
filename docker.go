@@ -13,7 +13,7 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
-type StackImage struct {
+type DockerStackImage struct {
 	stack string
 	image docker.APIImages
 }
@@ -42,8 +42,8 @@ func (d *Docker) Connect() (err error) {
 	return err
 }
 
-func (d *Docker) StackStat(stack string) (*StackImage, error) {
-	si := StackImage{
+func (d *Docker) StackStat(stack string) (*DockerStackImage, error) {
+	si := DockerStackImage{
 		stack: stack,
 	}
 
@@ -64,7 +64,7 @@ func (d *Docker) StackStat(stack string) (*StackImage, error) {
 	return nil, nil
 }
 
-func (d *Docker) BuildSlugImage(si *StackImage, release *Release) (
+func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 	string, error) {
 	// Exit early if the image is already around.
 	imageName := release.Name()

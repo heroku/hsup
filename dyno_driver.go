@@ -21,6 +21,7 @@ type Release struct {
 	appName string
 	config  map[string]string
 	slugURL string
+	stack   string
 	version int
 
 	// docker dyno driver properties
@@ -49,4 +50,12 @@ func (r *Release) Where() SlugWhere {
 	default:
 		return Local
 	}
+}
+
+func (r *Release) ConfigSlice() []string {
+	var c []string
+	for k, v := range r.config {
+		c = append(c, k+"="+v)
+	}
+	return c
 }
