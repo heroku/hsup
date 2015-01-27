@@ -28,7 +28,7 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 		return err
 	}
 	if si == nil {
-		log.Fatalf("Stack not found = %v\n", stack)
+		log.Fatalln("Stack not found:", stack)
 	}
 
 	imageName, err := dd.d.BuildSlugImage(si, release)

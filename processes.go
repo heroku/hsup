@@ -35,7 +35,7 @@ type Formation interface {
 func linuxAmd64Path() string {
 	exe, err := osext.Executable()
 	if err != nil {
-		log.Fatalf("could not locate own executable: %q", err.Error())
+		log.Fatalln("could not locate own executable:", err)
 	}
 
 	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
