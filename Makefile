@@ -14,7 +14,7 @@ gosrc          := src/github.com/heroku/hsup
 # deb build vars
 packagename    := hsup
 version        := 0.0.1
-buildpath      := $(shell mktemp -d 2>/dev/null || mktemp -d -t 'hsup.deb')
+buildpath      := $(shell pwd)/deb
 controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
 
