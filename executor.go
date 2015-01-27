@@ -104,12 +104,15 @@ again:
 		close(e.Complete)
 		return ErrExecutorComplete
 	case Retiring:
-		if err = e.DynoDriver.Stop(e); err != nil {
-			return err
+		switch input {
+		case Exited:
+			e.State = Retired
+			goto again
+		case Retire:
+			return e.DynoDriver.Stop(e)
+		default:
+			return nil
 		}
-
-		e.State = Retired
-		goto again
 	case Stopped:
 		switch input {
 		case Retire:
@@ -138,10 +141,7 @@ again:
 			e.State = Stopped
 			goto again
 		case Restart:
-			if err = e.DynoDriver.Stop(e); err != nil {
-				return err
-			}
-			goto again
+			return e.DynoDriver.Stop(e)
 		default:
 			panic(fmt.Sprintln("Invalid input", input))
 		}
