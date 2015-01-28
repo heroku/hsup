@@ -99,6 +99,10 @@
 			"Rev": "ec8ce9614a3180edd4669d941cfd3f5e8785fd20"
 		},
 		{
+			"ImportPath": "github.com/logplex/logplexc",
+			"Rev": "657fe1f25a3657806db367ab494322ef9900a48f"
+		},
+		{
 			"ImportPath": "github.com/ogier/pflag",
 			"Rev": "e4f7d00f344b0954fa3791a8527d10ba7334eceb"
 		},
