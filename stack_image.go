@@ -68,7 +68,7 @@ func HerokuStacksFromManifest(stacksDir string) ([]HerokuStackImage, error) {
 	if err := yaml.Unmarshal(manifest, &stacks); err != nil {
 		return nil, err
 	}
-	for i, _ := range stacks {
+	for i := range stacks {
 		stacks[i].basedir = stacksDir
 	}
 	return stacks, nil
