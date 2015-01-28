@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -135,6 +136,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 					State:       hsup.Stopped,
 					OneShot:     p.OneShot,
 					NewInput:    make(chan hsup.DynoInput),
+					LogplexURL:  hs.MustParseLogplexURL(),
 				}
 
 				if executor.OneShot {
@@ -157,6 +159,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 			OneShot:     true,
 			Status:      make(chan *hsup.ExitStatus),
 			NewInput:    make(chan hsup.DynoInput),
+			LogplexURL:  hs.MustParseLogplexURL(),
 		}
 
 		p.Executors = append(p.Executors, executor)
@@ -182,6 +185,8 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 		"specify a dyno driver (program that starts a program)")
 	controlPort := flag.IntP("controlport", "p", -1,
 		"start a control service on 127.0.0.1 on this port")
+	logplex := flag.String("logplex-url", "",
+		"a logplex url to send child process output")
 	flag.Parse()
 	args = flag.Args()
 
@@ -216,6 +221,14 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 	dynoDriver, err := findDynoDriver(*dynoDriverName)
 	if err != nil {
 		log.Fatalln("could not initiate dyno driver:", err.Error())
+	}
+
+	if *logplex != "" {
+		_, err = url.Parse(*logplex)
+		if err != nil {
+			log.Fatalln("invalid --logplex-url format:", err)
+		}
+		dst.LogplexURL = *logplex
 	}
 
 	dst.Driver = dynoDriver

@@ -241,6 +241,7 @@ func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
 		Action:      Start,
 		Driver:      &LibContainerInitDriver{},
 		FormName:    ctx.ex.ProcessType,
+		LogplexURL:  ctx.ex.logplexURLString(),
 	}
 	cmd := exec.Command(ctx.hsupBinaryPath)
 	cmd.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
@@ -308,6 +309,7 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 		Action:      Start,
 		Driver:      &AbsPathDynoDriver{},
 		FormName:    ex.ProcessType,
+		LogplexURL:  ex.logplexURLString(),
 	}
 	args := []string{"/tmp/hsup"}
 	container.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}

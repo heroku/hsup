@@ -151,6 +151,22 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 	ex.cmd.Stdin = os.Stdin
 	ex.cmd.Stdout = os.Stdout
 	ex.cmd.Stderr = os.Stderr
+
+	// Tee stdout and stderr to Logplex.
+	if ex.LogplexURL != nil {
+		var rStdout, rStderr io.Reader
+		rl, err := newRelay(ex.LogplexURL, ex.Name())
+		if err != nil {
+			return err
+		}
+
+		rStdout, ex.cmd.Stdout = teePipe(os.Stdout)
+		rStderr, ex.cmd.Stderr = teePipe(os.Stderr)
+
+		go rl.run(rStdout)
+		go rl.run(rStderr)
+	}
+
 	ex.cmd.Dir = "/app"
 
 	// Fill environment vector from Heroku configuration, with a

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/gob"
+	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -54,6 +56,27 @@ type Startup struct {
 
 	// For use with "run".
 	Args []string
+
+	// LogplexURL specifies where to forward the supervised
+	// process Stdout and Stderr when non-empty.
+	LogplexURL string
+}
+
+// Convenience function for parsing the stringy LogplexURL.  This is
+// helpful because gob encoding of url.URL values is not supported.
+// It's presumed that the URL-conformance of LogplexURL has already
+// been verified.
+func (hs *Startup) MustParseLogplexURL() *url.URL {
+	if hs.LogplexURL == "" {
+		return nil
+	}
+
+	u, err := url.Parse(hs.LogplexURL)
+	if err != nil {
+		panic(fmt.Sprintln("BUG could not parse url: ", err))
+	}
+
+	return u
 }
 
 type AppSerializable struct {

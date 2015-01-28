@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/fsouza/go-dockerclient"
+	"net/url"
 )
 
 type DynoState int
@@ -39,6 +40,7 @@ type Executor struct {
 	ProcessType string
 	Status      chan *ExitStatus
 	Complete    chan struct{}
+	LogplexURL  *url.URL
 
 	// simple, abspath, and libcontainer dyno driver properties
 	cmd     *exec.Cmd
@@ -152,4 +154,18 @@ again:
 
 func (e *Executor) Name() string {
 	return e.ProcessType + "." + strconv.Itoa(e.ProcessID)
+}
+
+// Convenience function to return an empty LogplexURL string when
+// there *url.URL is nil.
+//
+// This is necessitated because of the repeated conversions between
+// url.URL and string when dealing with hsup.Startup serialization
+// constraints.
+func (e *Executor) logplexURLString() string {
+	if e.LogplexURL == nil {
+		return ""
+	}
+
+	return e.LogplexURL.String()
 }
