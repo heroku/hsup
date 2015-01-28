@@ -7,8 +7,58 @@ import (
 	"strings"
 )
 
+type Action int
+
+const (
+	Build Action = iota
+	Start
+	Run
+)
+
+// Startup is a serializable struct sufficient to perform
+// sub-invocations of hsup.
+type Startup struct {
+	// App contains a representation of a single release of an
+	// application to run.
+	App AppSerializable
+
+	// OneShot is true when hsup terminates after the supervised
+	// program exits.
+	OneShot bool
+
+	// StartNumber is the first allocated ProcessID.  e.g. "2" in
+	// the case of "web.2".
+	StartNumber int
+
+	// Action enumerates the high level action of this hsup,
+	// e.g. "run", "start", "build".
+	Action Action
+
+	// Driver specifies the DynoDriver used to execute a program
+	// under hsup.  If used for sub-invocations, it must be
+	// registered via "gob.Register".
+	Driver DynoDriver
+
+	// SkipBuild is set to true tos kip skip the build step of
+	// running a program.  This is useful when hsup is being
+	// executed in the context of an already-prepared image
+	// containing a program.
+	SkipBuild bool
+
+	// Formation name for "Start" action.
+	FormName string
+
+	// ControlPort specifies the TCP port the hsup API listens on.
+	// Set to nil when API support is disabled.
+	ControlPort *int
+
+	// For use with "run".
+	Args []string
+}
+
 type AppSerializable struct {
 	Version   int
+	Name      string
 	Env       map[string]string
 	Slug      string
 	Stack     string
@@ -32,11 +82,11 @@ func (fs *FormationSerializable) Type() string {
 	return fs.FType
 }
 
-func (as *AppSerializable) ToBase64Gob() string {
+func (hs *Startup) ToBase64Gob() string {
 	buf := bytes.Buffer{}
 	b64enc := base64.NewEncoder(base64.StdEncoding, &buf)
 	enc := gob.NewEncoder(b64enc)
-	err := enc.Encode(as)
+	err := enc.Encode(hs)
 	b64enc.Close()
 	if err != nil {
 		panic("could not encode gob:" + err.Error())
@@ -45,31 +95,36 @@ func (as *AppSerializable) ToBase64Gob() string {
 	return buf.String()
 }
 
-func (as *AppSerializable) FromBase64Gob(payload string) {
+func (hs *Startup) FromBase64Gob(payload string) {
 	d := gob.NewDecoder(base64.NewDecoder(base64.StdEncoding,
 		strings.NewReader(payload)))
-	if err := d.Decode(as); err != nil {
+	if err := d.Decode(hs); err != nil {
 		panic("could not decode gob:" + err.Error())
 	}
 }
 
-func (as *AppSerializable) Procs(appName string, dd DynoDriver, oneShot bool) *Processes {
+func (hs *Startup) Procs() *Processes {
 	procs := &Processes{
 		Rel: &Release{
-			appName: appName,
-			config:  as.Env,
-			slugURL: as.Slug,
-			stack:   as.Stack,
-			version: as.Version,
+			appName: hs.App.Name,
+			config:  hs.App.Env,
+			slugURL: hs.App.Slug,
+			stack:   hs.App.Stack,
+			version: hs.App.Version,
 		},
-		Forms:   make([]Formation, len(as.Processes)),
-		Dd:      dd,
-		OneShot: oneShot,
+		Forms:   make([]Formation, len(hs.App.Processes)),
+		Dd:      hs.Driver,
+		OneShot: hs.OneShot,
 	}
 
-	for i := range as.Processes {
-		procs.Forms[i] = &as.Processes[i]
+	for i := range hs.App.Processes {
+		procs.Forms[i] = &hs.App.Processes[i]
 	}
 
 	return procs
+}
+
+func init() {
+	gob.Register(&AbsPathDynoDriver{})
+	gob.Register(&LibContainerInitDriver{})
 }

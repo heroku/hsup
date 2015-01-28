@@ -100,21 +100,18 @@ func (cr ExplicitConcResolver) Resolve(form hsup.Formation) int {
 	return cr[form.Type()]
 }
 
-func start(p *hsup.Processes, command string, args []string, concurrency int,
-	startNumber int) (
-	err error) {
-	if os.Getenv("HSUP_SKIP_BUILD") != "TRUE" {
-		err = p.Dd.Build(p.Rel)
+func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
+	if !hs.SkipBuild {
+		if err = p.Dd.Build(p.Rel); err != nil {
+			log.Printf(
+				"hsup could not bake image for release %s: %s",
+				p.Rel.Name(), err.Error())
+			return err
+		}
 	}
 
-	if err != nil {
-		log.Printf("hsup could not bake image for release %s: %s",
-			p.Rel.Name(), err.Error())
-		return err
-	}
-
-	switch command {
-	case "start":
+	switch hs.Action {
+	case hsup.Start:
 		var cr ConcResolver
 		switch len(args) {
 		case 0:
@@ -128,11 +125,10 @@ func start(p *hsup.Processes, command string, args []string, concurrency int,
 			log.Printf("formation quantity=%v type=%v\n",
 				conc, form.Type())
 			for i := 0; i < conc; i++ {
-				lpid := strconv.Itoa(i + startNumber)
 				executor := &hsup.Executor{
 					Args:        form.Args(),
 					DynoDriver:  p.Dd,
-					ProcessID:   lpid,
+					ProcessID:   i + hs.StartNumber,
 					ProcessType: form.Type(),
 					Release:     p.Rel,
 					Complete:    make(chan struct{}),
@@ -148,26 +144,23 @@ func start(p *hsup.Processes, command string, args []string, concurrency int,
 				p.Executors = append(p.Executors, executor)
 			}
 		}
-	case "run":
+	case hsup.Run:
 		p.OneShot = true
-		conc := getConcurrency(concurrency, 1)
-		for i := 0; i < conc; i++ {
-			lpid := strconv.Itoa(i + startNumber)
-			executor := &hsup.Executor{
-				Args:        args,
-				DynoDriver:  p.Dd,
-				ProcessID:   lpid,
-				ProcessType: "run",
-				Release:     p.Rel,
-				Complete:    make(chan struct{}),
-				State:       hsup.Stopped,
-				OneShot:     true,
-				Status:      make(chan *hsup.ExitStatus),
-				NewInput:    make(chan hsup.DynoInput),
-			}
-			p.Executors = append(p.Executors, executor)
+		executor := &hsup.Executor{
+			Args:        args,
+			DynoDriver:  p.Dd,
+			ProcessID:   hs.StartNumber,
+			ProcessType: "run",
+			Release:     p.Rel,
+			Complete:    make(chan struct{}),
+			State:       hsup.Stopped,
+			OneShot:     true,
+			Status:      make(chan *hsup.ExitStatus),
+			NewInput:    make(chan hsup.DynoInput),
 		}
-	case "build":
+
+		p.Executors = append(p.Executors, executor)
+	case hsup.Build:
 		p.OneShot = true
 	}
 
@@ -175,12 +168,62 @@ func start(p *hsup.Processes, command string, args []string, concurrency int,
 	return nil
 }
 
-func getConcurrency(concurrency int, defaultConcurrency int) int {
-	if concurrency == -1 {
-		return defaultConcurrency
+func fromOptions(dst *hsup.Startup) (args []string) {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "usage: %s COMMAND [OPTIONS]\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	appName := flag.StringP("app", "a", "", "app name")
+	oneShot := flag.BoolP("oneshot", "", false, "run as one-shot processes: "+
+		"no restarting")
+	startNumber := flag.IntP("start-number", "", 1,
+		"the first assigned number to process types, e.g. web.1")
+	dynoDriverName := flag.StringP("dynodriver", "d", "simple",
+		"specify a dyno driver (program that starts a program)")
+	controlPort := flag.IntP("controlport", "p", -1,
+		"start a control service on 127.0.0.1 on this port")
+	flag.Parse()
+	args = flag.Args()
+
+	if len(args) == 0 {
+		flag.Usage()
+		os.Exit(1)
 	}
 
-	return concurrency
+	switch args[0] {
+	case "run":
+		if len(args) <= 1 {
+			fmt.Fprintln(os.Stderr, "Need a program and arguments "+
+				"specified for \"run\".")
+			os.Exit(1)
+		}
+
+		dst.Action = hsup.Run
+	case "build":
+		if len(args) != 1 {
+			fmt.Fprintln(os.Stderr, "\"build\" accepts no arguments")
+			os.Exit(1)
+		}
+		dst.Action = hsup.Build
+	case "start":
+		dst.Action = hsup.Start
+	default:
+		fmt.Fprintf(os.Stderr, "Command not found: %v\n", args[0])
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	dynoDriver, err := findDynoDriver(*dynoDriverName)
+	if err != nil {
+		log.Fatalln("could not initiate dyno driver:", err.Error())
+	}
+
+	dst.Driver = dynoDriver
+	dst.App.Name = *appName
+	dst.OneShot = *oneShot
+	dst.StartNumber = *startNumber
+	dst.ControlPort = controlPort
+	return args[1:]
 }
 
 func main() {
@@ -200,78 +243,26 @@ func main() {
 		log.Fatal("need HEROKU_ACCESS_TOKEN or HSUP_CONTROL_DIR")
 	}
 
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: %s COMMAND [OPTIONS]\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	appName := flag.StringP("app", "a", "", "app name")
-	oneShot := flag.BoolP("oneshot", "", false, "run as one-shot processes: "+
-		"no restarting")
-	startNumber := flag.IntP("start-number", "", 1,
-		"the first assigned number to process types, e.g. web.1")
-	concurrency := flag.IntP("concurrency", "c", -1,
-		"concurrency number")
-	dynoDriverName := flag.StringP("dynodriver", "d", "simple",
-		"specify a dyno driver (program that starts a program)")
-	controlPort := flag.IntP("controlport", "p", -1, "start a control service on 127.0.0.1 on this port")
-	flag.Parse()
-	args := flag.Args()
+	var hs hsup.Startup
 
-	if len(args) == 0 {
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	switch args[0] {
-	case "run":
-		if len(args) <= 1 {
-			fmt.Fprintln(os.Stderr, "Need a program and arguments "+
-				"specified for \"run\".")
-			os.Exit(1)
-		}
-	case "build":
-		if len(args) != 1 {
-			fmt.Fprintln(os.Stderr, "\"build\" accepts no arguments")
-			os.Exit(1)
-		}
-	case "start":
-	default:
-		fmt.Fprintf(os.Stderr, "Command not found: %v\n", args[0])
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	dynoDriver, err := findDynoDriver(*dynoDriverName)
-	if err != nil {
-		log.Fatalln("could not initiate dyno driver:", err.Error())
+	var args []string
+	if controlGob != "" {
+		hs.FromBase64Gob(controlGob)
+	} else {
+		args = fromOptions(&hs)
 	}
 
 	var poller hsup.Notifier
 	switch {
 	case controlGob != "":
-		poller = &hsup.GobNotifier{
-			Dd:      dynoDriver,
-			AppName: *appName,
-			OneShot: *oneShot,
-			Payload: controlGob,
-		}
+		poller = &hsup.GobNotifier{Payload: controlGob}
 	case token != "":
 		heroku.DefaultTransport.Username = ""
 		heroku.DefaultTransport.Password = token
 		cl := heroku.NewService(heroku.DefaultClient)
-		poller = &hsup.APIPoller{
-			Cl:      cl,
-			App:     *appName,
-			Dd:      dynoDriver,
-			OneShot: *oneShot,
-		}
+		poller = &hsup.APIPoller{Cl: cl, Hs: &hs}
 	case controlDir != "":
-		poller = &hsup.DirPoller{
-			Dd:      dynoDriver,
-			Dir:     controlDir,
-			AppName: *appName,
-			OneShot: *oneShot,
-		}
+		poller = &hsup.DirPoller{Hs: &hs, Dir: controlDir}
 	default:
 		panic("one of token or watch dir ought to have been defined")
 	}
@@ -281,8 +272,8 @@ func main() {
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	var p *hsup.Processes
 
-	if *controlPort != -1 {
-		procs = hsup.StartControlAPI(*controlPort, procs)
+	if hs.ControlPort != nil {
+		procs = hsup.StartControlAPI(*hs.ControlPort, procs)
 	}
 
 	for {
@@ -292,9 +283,7 @@ func main() {
 				stopParallel(p)
 			}
 			p = newProcs
-			err = start(p, args[0], args[1:], *concurrency,
-				*startNumber)
-			if err != nil {
+			if err = start(p, &hs, args); err != nil {
 				log.Fatalln("could not start process:", err)
 			}
 		case statv := <-statuses(p):

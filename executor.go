@@ -3,10 +3,10 @@ package hsup
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os/exec"
-
-	"fmt"
+	"strconv"
 
 	"github.com/fsouza/go-dockerclient"
 )
@@ -35,7 +35,7 @@ type Executor struct {
 	Args        []string
 	DynoDriver  DynoDriver
 	Release     *Release
-	ProcessID   string
+	ProcessID   int
 	ProcessType string
 	Status      chan *ExitStatus
 	Complete    chan struct{}
@@ -151,5 +151,5 @@ again:
 }
 
 func (e *Executor) Name() string {
-	return e.ProcessType + "." + e.ProcessID
+	return e.ProcessType + "." + strconv.Itoa(e.ProcessID)
 }

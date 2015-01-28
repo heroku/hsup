@@ -34,7 +34,7 @@ var defaultFixture = ControlDirFixture{
     ]
 }
 `),
-	repr: `{Version:1 Env:map[NAME:CONTENTS] Slug:sample-slug.tgz Stack:cedar-14 Processes:[{FArgs:[./web-server arg] FQuantity:2 FType:web} {FArgs:[./worker arg] FQuantity:2 FType:worker}]}`,
+	repr: `{Version:1 Name: Env:map[NAME:CONTENTS] Slug:sample-slug.tgz Stack:cedar-14 Processes:[{FArgs:[./web-server arg] FQuantity:2 FType:web} {FArgs:[./worker arg] FQuantity:2 FType:worker}]}`,
 }
 
 var anotherFixture = ControlDirFixture{
@@ -54,7 +54,7 @@ var anotherFixture = ControlDirFixture{
     ]
 }
 `),
-	repr: `{Version:2 Env:map[another:fixture] Slug:another-slug.tgz Stack:cedar Processes:[{FArgs:[another fixture] FQuantity:3 FType:another-fixture}]}`,
+	repr: `{Version:2 Name: Env:map[another:fixture] Slug:another-slug.tgz Stack:cedar Processes:[{FArgs:[another fixture] FQuantity:3 FType:another-fixture}]}`,
 }
 
 func newTmpDb(t *testing.T) string {

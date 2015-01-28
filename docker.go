@@ -81,7 +81,8 @@ func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 	tr := tar.NewWriter(inputBuf)
 	defer tr.Close()
 
-	var as AppSerializable
+	hs := Startup{Action: Build, Driver: &AbsPathDynoDriver{}}
+
 	hsupBytes, err := ioutil.ReadFile(linuxAmd64Path())
 	if err != nil {
 		return "", err
@@ -112,18 +113,17 @@ func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 			ModTime: t, AccessTime: t,
 			ChangeTime: t})
 		tr.Write(slug)
-		as = AppSerializable{Slug: "/tmp/slug.tgz"}
+		hs.App.Slug = "/tmp/slug.tgz"
 	case HTTP:
 		// Rely on abspath driver for the fetch.
-		as = AppSerializable{Slug: release.slugURL}
+		hs.App.Slug = release.slugURL
 	default:
 		panic("unenumerated slug location")
 	}
 
 	// Generate Dockerfile and place in archive.
-	genv := "HSUP_CONTROL_GOB=" + as.ToBase64Gob()
-	args := []string{"setuidgid", "app", "env", genv,
-		"/tmp/hsup", "-d", "abspath", "build", "-a", release.appName}
+	genv := "HSUP_CONTROL_GOB=" + hs.ToBase64Gob()
+	args := []string{"setuidgid", "app", "env", genv, "/tmp/hsup"}
 	argText, err := json.Marshal(args)
 	if err != nil {
 		panic(fmt.Sprintln("could not marshal argv:", args))

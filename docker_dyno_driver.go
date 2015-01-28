@@ -42,17 +42,24 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 }
 
 func (dd *DockerDynoDriver) Start(ex *Executor) error {
-	as := AppSerializable{
-		Version: ex.Release.version,
-		Env:     ex.Release.config,
-		Stack:   ex.Release.stack,
-		Processes: []FormationSerializable{
-			{
-				FArgs:     ex.Args,
-				FQuantity: 1,
-				FType:     ex.ProcessType,
+	hs := Startup{
+		App: AppSerializable{
+			Version: ex.Release.version,
+			Name:    ex.Release.appName,
+			Env:     ex.Release.config,
+			Stack:   ex.Release.stack,
+			Processes: []FormationSerializable{
+				{
+					FArgs:     ex.Args,
+					FQuantity: 1,
+					FType:     ex.ProcessType,
+				},
 			},
 		},
+		OneShot:     true,
+		StartNumber: ex.ProcessID,
+		Action:      Start,
+		Driver:      &AbsPathDynoDriver{},
 	}
 
 	// attach a timestamp as some extra entropy because container names must be
@@ -61,13 +68,8 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: name,
 		Config: &docker.Config{
-			Cmd: []string{"setuidgid", "app",
-				"/hsup", "-d", "abspath", "-a",
-				ex.Release.appName, "--oneshot",
-				"--start-number=" + ex.ProcessID,
-				"start", ex.ProcessType},
-			Env: []string{"HSUP_SKIP_BUILD=TRUE",
-				"HSUP_CONTROL_GOB=" + as.ToBase64Gob()},
+			Cmd:     []string{"setuidgid", "app", "/hsup"},
+			Env:     []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()},
 			Image:   ex.Release.imageName,
 			Volumes: map[string]struct{}{"/hsup": {}},
 		},

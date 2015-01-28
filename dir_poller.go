@@ -6,12 +6,11 @@ import (
 )
 
 type DirPoller struct {
-	Dd      DynoDriver
-	Dir     string
-	AppName string
-	OneShot bool
+	Dir string
+	Hs  *Startup
 
-	c             *conf
+	c *conf
+
 	lastReleaseID string
 }
 
@@ -28,7 +27,7 @@ func (dp *DirPoller) Notify() <-chan *Processes {
 
 func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 	for {
-		var as *AppSerializable
+		var hs Startup
 
 		newInfo, err := dp.c.Notify()
 		if err != nil {
@@ -41,8 +40,12 @@ func (dp *DirPoller) pollSynchronous(out chan<- *Processes) {
 			goto wait
 		}
 
-		as = dp.c.Snapshot().(*AppSerializable)
-		out <- as.Procs(dp.AppName, dp.Dd, dp.OneShot)
+		hs = Startup{
+			App:     *dp.c.Snapshot().(*AppSerializable),
+			Driver:  dp.Hs.Driver,
+			OneShot: dp.Hs.OneShot,
+		}
+		out <- hs.Procs()
 	wait:
 		time.Sleep(10 * time.Second)
 	}

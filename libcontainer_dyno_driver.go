@@ -222,28 +222,28 @@ type containerInit struct {
 func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
 	dataPath, init string, controlPipe *os.File, args []string) *exec.Cmd {
 
-	state := AppSerializable{
-		Version: ctx.ex.Release.version,
-		Env:     ctx.ex.Release.config,
-		Slug:    ctx.ex.Release.slugURL,
-		Stack:   ctx.ex.Release.stack,
-		Processes: []FormationSerializable{
-			{
-				FArgs:     ctx.ex.Args,
-				FQuantity: 1,
-				FType:     ctx.ex.ProcessType,
+	hs := Startup{
+		App: AppSerializable{
+			Version: ctx.ex.Release.version,
+			Env:     ctx.ex.Release.config,
+			Slug:    ctx.ex.Release.slugURL,
+			Stack:   ctx.ex.Release.stack,
+			Processes: []FormationSerializable{
+				{
+					FArgs:     ctx.ex.Args,
+					FQuantity: 1,
+					FType:     ctx.ex.ProcessType,
+				},
 			},
 		},
+		OneShot:     true,
+		StartNumber: ctx.ex.ProcessID,
+		Action:      Start,
+		Driver:      &LibContainerInitDriver{},
+		FormName:    ctx.ex.ProcessType,
 	}
-	cmd := exec.Command(ctx.hsupBinaryPath,
-		"-d", "libcontainer-init", "-a", ctx.ex.Release.appName,
-		"--oneshot", "--start-number="+ctx.ex.ProcessID,
-		"start", ctx.ex.ProcessType,
-	)
-	cmd.Env = []string{
-		"HSUP_SKIP_BUILD=TRUE",
-		"HSUP_CONTROL_GOB=" + state.ToBase64Gob(),
-	}
+	cmd := exec.Command(ctx.hsupBinaryPath)
+	cmd.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
@@ -289,28 +289,28 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 		pieces := strings.SplitN(entry, "=", 2)
 		dynoEnv[pieces[0]] = pieces[1]
 	}
-	as := AppSerializable{
-		Version: ex.Release.version,
-		Env:     dynoEnv,
-		Slug:    ex.Release.slugURL,
-		Stack:   ex.Release.stack,
-		Processes: []FormationSerializable{
-			{
-				FArgs:     ex.Args,
-				FQuantity: 1,
-				FType:     ex.ProcessType,
+	hs := Startup{
+		App: AppSerializable{
+			Version: ex.Release.version,
+			Env:     dynoEnv,
+			Slug:    ex.Release.slugURL,
+			Stack:   ex.Release.stack,
+			Processes: []FormationSerializable{
+				{
+					FArgs:     ex.Args,
+					FQuantity: 1,
+					FType:     ex.ProcessType,
+				},
 			},
 		},
+		OneShot:     true,
+		StartNumber: ex.ProcessID,
+		Action:      Start,
+		Driver:      &AbsPathDynoDriver{},
+		FormName:    ex.ProcessType,
 	}
-	args := []string{
-		"/tmp/hsup", "-d", "abspath", "-a", ex.Release.appName,
-		"--oneshot", "--start-number=" + ex.ProcessID,
-		"start", ex.ProcessType,
-	}
-	container.Env = []string{
-		"HSUP_SKIP_BUILD=TRUE",
-		"HSUP_CONTROL_GOB=" + as.ToBase64Gob(),
-	}
+	args := []string{"/tmp/hsup"}
+	container.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
 	// TODO: clean up /tmp/hsup and /tmp/slug.tgz after abspath reads them
 	return namespaces.Init(
 		&container, container.RootFs, "",

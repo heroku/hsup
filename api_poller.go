@@ -7,10 +7,8 @@ import (
 )
 
 type APIPoller struct {
-	Cl      *heroku.Service
-	App     string
-	Dd      DynoDriver
-	OneShot bool
+	Cl *heroku.Service
+	Hs *Startup
 
 	lastReleaseID string
 }
@@ -42,8 +40,8 @@ func (ap *APIPoller) Notify() <-chan *Processes {
 
 func (ap *APIPoller) fetchLatest() (*heroku.Release, error) {
 	releases, err := ap.Cl.ReleaseList(
-		ap.App, &heroku.ListRange{Descending: true, Field: "version",
-			Max: 1})
+		ap.Hs.App.Name,
+		&heroku.ListRange{Descending: true, Field: "version", Max: 1})
 	if err != nil {
 		return nil, err
 	}
@@ -56,31 +54,31 @@ func (ap *APIPoller) fetchLatest() (*heroku.Release, error) {
 }
 
 func (ap *APIPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
-	config, err := ap.Cl.ConfigVarInfo(ap.App)
+	config, err := ap.Cl.ConfigVarInfo(ap.Hs.App.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	slug, err := ap.Cl.SlugInfo(ap.App, rel.Slug.ID)
+	slug, err := ap.Cl.SlugInfo(ap.Hs.App.Name, rel.Slug.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	hForms, err := ap.Cl.FormationList(ap.App, &heroku.ListRange{})
+	hForms, err := ap.Cl.FormationList(ap.Hs.App.Name, &heroku.ListRange{})
 	if err != nil {
 		return nil, err
 	}
 
 	procs := Processes{
 		Rel: &Release{
-			appName: ap.App,
+			appName: ap.Hs.App.Name,
 			config:  config,
 			slugURL: slug.Blob.URL,
 			version: rel.Version,
 		},
 		Forms:   make([]Formation, len(hForms), len(hForms)),
-		Dd:      ap.Dd,
-		OneShot: ap.OneShot,
+		Dd:      ap.Hs.Driver,
+		OneShot: ap.Hs.OneShot,
 	}
 
 	for i, hForm := range hForms {
