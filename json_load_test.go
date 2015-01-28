@@ -180,8 +180,8 @@ func TestLoadCycle(t *testing.T) {
 
 	// Check Unmarshal contents.
 	db := *c.Snapshot().(*AppSerializable)
-	expected := fmt.Sprintf("%+v", db)
-	if expected != defaultFixture.repr {
+	result := fmt.Sprintf("%+v", db)
+	if result != defaultFixture.repr {
 		t.Fatal()
 	}
 
@@ -208,9 +208,9 @@ func TestLoadCycle(t *testing.T) {
 	}
 
 	db = *c.Snapshot().(*AppSerializable)
-	expected = fmt.Sprintf("%+v", db)
-	if expected != anotherFixture.repr {
-		t.Fatal(expected)
+	result = fmt.Sprintf("%+v", db)
+	if result != anotherFixture.repr {
+		t.Fatal(result)
 	}
 
 	// Test errornous load.
