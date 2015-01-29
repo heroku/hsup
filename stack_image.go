@@ -147,26 +147,28 @@ func (img *HerokuStackImage) fetch() error {
 	// TODO check md5
 	pr, pw := io.Pipe()
 	defer pr.Close()
-	defer pw.Close()
 
 	u, err := url.Parse(img.URL)
 	if err != nil {
 		return err
 	}
 
-	dlResult := make(chan error)
+	// buffered channel: avoid blocking the writer goroutine
+	dlResult := make(chan error, 1)
 	go func() {
+		// close the pipe as soon as the download finishes so readers receive EOF
+		defer pw.Close()
 		client := *http.DefaultClient
 		if u.Scheme == "https" {
 			client.Transport = &http.Transport{
 				TLSClientConfig: &tls.Config{},
 			}
 		}
-		// buffer downloads in case decompression can't keep up
+		// buffer the download in case gunzip can't keep up
 		w := bufio.NewWriter(pw)
 		_, err := htcat.New(&client, u, 5).WriteTo(w)
-		dlResult <- err
 		w.Flush()
+		dlResult <- err
 	}()
 
 	r, err := gzip.NewReader(pr)
