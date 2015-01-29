@@ -305,6 +305,7 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 			},
 		},
 		OneShot:     true,
+		SkipBuild:   false,
 		StartNumber: ex.ProcessID,
 		Action:      Start,
 		Driver:      &AbsPathDynoDriver{},
