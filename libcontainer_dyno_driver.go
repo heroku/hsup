@@ -450,6 +450,15 @@ func containerConfig(
 				Mtu:     1500,
 				Type:    "loopback",
 			},
+			// TODO: setup our own network instead of using the docker bridge
+			{
+				Address:    "172.17.0.101/16",
+				Bridge:     "docker0",
+				VethPrefix: "veth",
+				Gateway:    "172.17.42.1",
+				Mtu:        1500,
+				Type:       "veth",
+			},
 		},
 		Cgroups: &cgroups.Cgroup{
 			Name: containerUUID,
