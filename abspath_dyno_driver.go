@@ -14,7 +14,7 @@ import (
 
 var ErrNoSlugURL = errors.New("no slug specified")
 
-const ProfileRunnerText = `#!/bin/bash
+const profileRunnerText = `#!/bin/bash
 export PS1='\[\033[01;34m\]\w\[\033[00m\] \[\033[01;32m\]$ \[\033[00m\]'
 
 if [ -d /etc/profile.d ]; then
@@ -39,16 +39,16 @@ rm $0
 exec "$@"
 `
 
-type ProfileRunner struct {
+type profileRunner struct {
 	file *os.File
 }
 
-func (pr *ProfileRunner) Init() (err error) {
+func (pr *profileRunner) Init() (err error) {
 	if pr.file, err = ioutil.TempFile("", "pr_"); err != nil {
 		return err
 	}
 
-	if _, err = pr.file.Write([]byte(ProfileRunnerText)); err != nil {
+	if _, err = pr.file.Write([]byte(profileRunnerText)); err != nil {
 		return err
 	}
 
@@ -64,7 +64,7 @@ func (pr *ProfileRunner) Init() (err error) {
 	return pr.file.Close()
 }
 
-func (pr *ProfileRunner) Args(args []string) []string {
+func (pr *profileRunner) Args(args []string) []string {
 	return append([]string{pr.file.Name()}, args...)
 }
 
@@ -140,7 +140,7 @@ func (dd *AbsPathDynoDriver) Build(release *Release) (err error) {
 }
 
 func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
-	var pr ProfileRunner
+	var pr profileRunner
 	if err = pr.Init(); err != nil {
 		return err
 	}
