@@ -41,6 +41,7 @@ type Executor struct {
 	Status      chan *ExitStatus
 	Complete    chan struct{}
 	LogplexURL  *url.URL
+	Binds       map[string]string
 
 	// simple, abspath, and libcontainer dyno driver properties
 	cmd     *exec.Cmd
@@ -168,4 +169,16 @@ func (e *Executor) logplexURLString() string {
 	}
 
 	return e.LogplexURL.String()
+}
+
+func (e *Executor) bindPairs() []string {
+	pairs := make([]string, len(e.Binds))
+
+	i := 0
+	for k, v := range e.Binds {
+		pairs[i] = fmt.Sprintf("%s:%s", k, v)
+		i += 1
+	}
+
+	return pairs
 }

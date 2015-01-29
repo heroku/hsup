@@ -66,13 +66,19 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	// attach a timestamp as some extra entropy because container names must be
 	// unique
 	name := fmt.Sprintf("%v.%v", ex.Name(), time.Now().Unix())
+	vols := make(map[string]struct{})
+	vols["/hsup"] = struct{}{}
+	for _, inside := range ex.Binds {
+		vols[inside] = struct{}{}
+	}
+
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: name,
 		Config: &docker.Config{
 			Cmd:     []string{"setuidgid", "app", "/hsup"},
 			Env:     []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()},
 			Image:   ex.Release.imageName,
-			Volumes: map[string]struct{}{"/hsup": {}},
+			Volumes: vols,
 		},
 	})
 	if err != nil {
@@ -86,7 +92,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	}
 
 	err = dd.d.c.StartContainer(ex.container.ID, &docker.HostConfig{
-		Binds: []string{where + ":/hsup"},
+		Binds: append([]string{where + ":/hsup"}, ex.bindPairs()...),
 	})
 	if err != nil {
 		log.Fatal(err)

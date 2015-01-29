@@ -137,6 +137,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 					OneShot:     p.OneShot,
 					NewInput:    make(chan hsup.DynoInput),
 					LogplexURL:  hs.MustParseLogplexURL(),
+					Binds:       hs.Binds,
 				}
 
 				if executor.OneShot {
@@ -160,6 +161,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 			Status:      make(chan *hsup.ExitStatus),
 			NewInput:    make(chan hsup.DynoInput),
 			LogplexURL:  hs.MustParseLogplexURL(),
+			Binds:       hs.Binds,
 		}
 
 		p.Executors = append(p.Executors, executor)
@@ -169,6 +171,21 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 
 	startParallel(p)
 	return nil
+}
+
+func bindParse(bs string) map[string]string {
+	out := make(map[string]string)
+	parts := strings.SplitN(bs, ":", 2)
+	switch len(parts) {
+	case 2:
+		out[parts[0]] = parts[1]
+	case 1:
+		out[parts[0]] = parts[0]
+	default:
+		panic(fmt.Sprintf("BUG: start parsing %v, %v", bs, parts))
+	}
+
+	return out
 }
 
 func fromOptions(dst *hsup.Startup) (args []string) {
@@ -187,6 +204,9 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 		"start a control service on 127.0.0.1 on this port")
 	logplex := flag.String("logplex-url", "",
 		"a logplex url to send child process output")
+	bind := flag.String("bind", "",
+		"host paths that are available within the container, "+
+			"e.g. /tmp:/app/mytmp")
 	flag.Parse()
 	args = flag.Args()
 
@@ -236,6 +256,11 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 	dst.OneShot = *oneShot
 	dst.StartNumber = *startNumber
 	dst.ControlPort = controlPort
+
+	if *bind != "" {
+		dst.Binds = bindParse(*bind)
+	}
+
 	return args[1:]
 }
 

@@ -60,6 +60,10 @@ type Startup struct {
 	// LogplexURL specifies where to forward the supervised
 	// process Stdout and Stderr when non-empty.
 	LogplexURL string
+
+	// Binds enumerates paths bound from the host into a
+	// container.
+	Binds map[string]string
 }
 
 // Convenience function for parsing the stringy LogplexURL.  This is
