@@ -121,7 +121,7 @@ func (img *HerokuStackImage) mount() error {
 	}
 	log.Printf("Mounting stach image %q onto %q", imgFile, imgDir)
 	out, err := exec.Command(
-		"mount", "-o", "loop,nosuid,nodev,noatime,nodiratime,rw",
+		"/bin/mount", "-o", "loop,nosuid,nodev,noatime,nodiratime,rw",
 		imgFile, imgDir,
 	).CombinedOutput()
 	if err != nil {
