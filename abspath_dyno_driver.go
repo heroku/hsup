@@ -114,7 +114,7 @@ func (dd *AbsPathDynoDriver) unpack(release *Release) error {
 			"transmogrified to a local path")
 	}
 
-	cmd := exec.Command("tar", "-C", "/app", "--strip-components=2", "-zxf",
+	cmd := exec.Command("/bin/tar", "-C", "/app", "--strip-components=2", "-zxf",
 		release.slugURL)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
