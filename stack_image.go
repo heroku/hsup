@@ -119,7 +119,7 @@ func (img *HerokuStackImage) mount() error {
 	} else if len(contents) != 0 {
 		return nil // already mounted
 	}
-	log.Printf("Mounting stach image %q onto %q", imgFile, imgDir)
+	log.Printf("Mounting stack image %q onto %q", imgFile, imgDir)
 	out, err := exec.Command(
 		"/bin/mount", "-o", "loop,nosuid,nodev,noatime,nodiratime,rw",
 		imgFile, imgDir,
@@ -143,7 +143,7 @@ func (img *HerokuStackImage) addMissingDirectories() error {
 
 //TODO: avoid multiple processes trying to fetch the same stack image
 func (img *HerokuStackImage) fetch() error {
-	log.Printf("Downloading stach image %q. This may take a while...", img.Name)
+	log.Printf("Downloading stack image %q. This may take a while...", img.Name)
 	// TODO check md5
 	pr, pw := io.Pipe()
 	defer pr.Close()
