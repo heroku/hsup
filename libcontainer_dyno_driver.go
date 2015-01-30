@@ -323,13 +323,11 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 
 func (dd *LibContainerInitDriver) Stop(*Executor) error {
 	panic("this should never be called")
-	return nil
 }
 
 func (dd *LibContainerInitDriver) Wait(*Executor) *ExitStatus {
 	// this should be unreachable, but in case it is called, sleep forever:
 	select {}
-	return nil
 }
 
 func containerConfig(
