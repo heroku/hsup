@@ -17,6 +17,11 @@ type DockerDynoDriver struct {
 }
 
 func (dd *DockerDynoDriver) Build(release *Release) error {
+	if release.stack != "cedar-14" {
+		return fmt.Errorf("only cedar-14 is supported, but the "+
+			"application uses the %q stack", release.stack)
+	}
+
 	if err := dd.connectDocker(); err != nil {
 		return err
 	}

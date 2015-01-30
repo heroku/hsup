@@ -69,10 +69,16 @@ func (ap *APIPoller) fillProcesses(rel *heroku.Release) (*Processes, error) {
 		return nil, err
 	}
 
+	ai, err := ap.Cl.AppInfo(ap.Hs.App.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	procs := Processes{
 		Rel: &Release{
 			appName: ap.Hs.App.Name,
 			config:  config,
+			stack:   ai.Stack.Name,
 			slugURL: slug.Blob.URL,
 			version: rel.Version,
 		},
