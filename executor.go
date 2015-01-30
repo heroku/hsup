@@ -177,7 +177,7 @@ func (e *Executor) bindPairs() []string {
 	i := 0
 	for k, v := range e.Binds {
 		pairs[i] = fmt.Sprintf("%s:%s", k, v)
-		i += 1
+		i++
 	}
 
 	return pairs
