@@ -25,7 +25,7 @@ import (
 
 const (
 	// currently available versions of Heroku stack images
-	HEROKU_STACKS_MANIFEST_URL = "https://s3.amazonaws.com/heroku_stacks_production/manifest.yml"
+	HerokuStacksManifestURL = "https://s3.amazonaws.com/heroku_stacks_production/manifest.yml"
 )
 
 // HerokuStackImage models stack images as they are distributed by Heroku:
@@ -49,7 +49,7 @@ type HerokuStackImage struct {
 
 func HerokuStacksFromManifest(stacksDir string) ([]HerokuStackImage, error) {
 	// TODO: cache the manifest
-	resp, err := http.Get(HEROKU_STACKS_MANIFEST_URL)
+	resp, err := http.Get(HerokuStacksManifestURL)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func HerokuStacksFromManifest(stacksDir string) ([]HerokuStackImage, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf(
 			"invalid stacks manifest at %q",
-			HEROKU_STACKS_MANIFEST_URL,
+			HerokuStacksManifestURL,
 		)
 	}
 	manifest, err := ioutil.ReadAll(resp.Body)
