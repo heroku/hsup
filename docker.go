@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
+	"github.com/heroku/hsup/diag"
 )
 
 type DockerStackImage struct {
@@ -27,10 +28,11 @@ func (d *Docker) Connect() (err error) {
 	if endpoint == "" {
 		endpoint = "unix:///var/run/docker.sock"
 	}
-	log.Printf("DOCKER_HOST = %v\n", endpoint)
+	diag.Log("DOCKER_HOST =", endpoint)
 
 	certPath := os.Getenv("DOCKER_CERT_PATH")
-	log.Printf("DOCKER_CERT_PATH = %v\n", certPath)
+	diag.Log("DOCKER_CERT_PATH =", certPath)
+
 	if certPath == "" {
 		d.c, err = docker.NewClient(endpoint)
 	} else {
@@ -145,7 +147,7 @@ RUN rm /tmp/hsup
 WORKDIR /app
 `, si.image.ID, localSlugText, argText)
 
-	log.Println(dockerContents)
+	diag.Log("building with Dockerfile", dockerContents)
 	tr.WriteHeader(&tar.Header{
 		Name:    "Dockerfile",
 		Size:    int64(len(dockerContents)),

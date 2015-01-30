@@ -1,11 +1,12 @@
 package hsup
 
 import (
-	"log"
 	"os"
 	"os/exec"
 	"syscall"
 	"time"
+
+	"github.com/heroku/hsup/diag"
 )
 
 type SimpleDynoDriver struct {
@@ -75,13 +76,13 @@ func (dd *SimpleDynoDriver) Stop(ex *Executor) error {
 	for {
 		select {
 		case <-time.After(10 * time.Second):
-			log.Println("sigkill", group)
+			diag.Log("sigkill", group)
 			group.Signal(syscall.SIGKILL)
 		case <-ex.waiting:
-			log.Println("waited", group)
+			diag.Log("waited", group)
 			return nil
 		}
-		log.Println("spin", group)
+		diag.Log("spin", group)
 		time.Sleep(1)
 	}
 }

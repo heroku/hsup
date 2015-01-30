@@ -12,6 +12,7 @@ import (
 
 	"github.com/cyberdelia/heroku-go/v3"
 	"github.com/heroku/hsup"
+	"github.com/heroku/hsup/diag"
 	flag "github.com/ogier/pflag"
 )
 
@@ -49,6 +50,37 @@ func findDynoDriver(name string) (hsup.DynoDriver, error) {
 	default:
 		return nil, fmt.Errorf("could not locate driver. "+
 			"specified by the user: %v", name)
+	}
+}
+
+func dumpOnSignal() {
+	signals := make(chan os.Signal)
+	signal.Notify(signals, syscall.SIGUSR1)
+
+	go func() {
+		for {
+			<-signals
+			dump()
+		}
+	}()
+}
+
+func dump() {
+	for _, r := range diag.Contents() {
+		last := len(r) - 1
+		if last == 0 {
+			continue
+		}
+
+		// Trim terminating newlines of records for
+		// compactness and consistency.  This is common for
+		// records emitted by the "log" package.
+		switch r[last] {
+		case '\n':
+			os.Stderr.WriteString(r[:last])
+		default:
+			os.Stderr.WriteString(r + "\n")
+		}
 	}
 }
 
@@ -265,6 +297,7 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 }
 
 func main() {
+	dumpOnSignal()
 	var err error
 	log.Println("Starting hsup")
 
@@ -358,10 +391,10 @@ func startParallel(p *hsup.Processes) {
 	for _, executor := range p.Executors {
 		go func(executor *hsup.Executor) {
 			go executor.Trigger(hsup.StayStarted)
-			log.Println("Beginning Tickloop for", executor.Name())
+			diag.Log("Beginning Tickloop for", executor.Name())
 			for executor.Tick() != hsup.ErrExecutorComplete {
 			}
-			log.Println("Executor completes", executor.Name())
+			diag.Log("Executor completes", executor.Name())
 		}(executor)
 	}
 }

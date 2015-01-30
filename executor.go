@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os/exec"
 	"strconv"
 
 	"github.com/fsouza/go-dockerclient"
-	"net/url"
+	"github.com/heroku/hsup/diag"
 )
 
 type DynoState int
@@ -62,8 +63,14 @@ type Executor struct {
 	NewInput chan DynoInput
 }
 
+func (e *Executor) dlog(values ...interface{}) {
+	diag.Log(append(
+		[]interface{}{"Executor", e.Name(), fmt.Sprintf("%p", e)},
+		values...)...)
+}
+
 func (e *Executor) Trigger(input DynoInput) {
-	log.Println("triggering", input)
+	e.dlog("trigger", e, input)
 	select {
 	case e.NewInput <- input:
 	case <-e.Complete:
@@ -79,9 +86,9 @@ func (e *Executor) wait() {
 }
 
 func (e *Executor) Tick() (err error) {
-	log.Println(e.Name(), "waiting for tick...", e.State)
+	e.dlog("waiting for tick...", e.State)
 	input := <-e.NewInput
-	log.Println(e.Name(), "ticking with input", input)
+	e.dlog("ticking with input", e.State)
 
 	start := func() error {
 		log.Printf("%v: starting\n", e.Name())
@@ -95,7 +102,7 @@ func (e *Executor) Tick() (err error) {
 			return err
 		}
 
-		log.Printf("%v: started\n", e.Name())
+		e.dlog("started")
 		e.State = Started
 		go e.wait()
 		return nil
