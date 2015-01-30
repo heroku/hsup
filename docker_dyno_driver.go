@@ -80,10 +80,11 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: name,
 		Config: &docker.Config{
-			Cmd:     []string{"setuidgid", "app", "/hsup"},
-			Env:     []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()},
-			Image:   ex.Release.imageName,
-			Volumes: vols,
+			Cmd:          []string{"setuidgid", "app", "/hsup"},
+			Env:          []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()},
+			Image:        ex.Release.imageName,
+			Volumes:      vols,
+			ExposedPorts: map[docker.Port]struct{}{docker.Port("5000/tcp"): {}},
 		},
 	})
 	if err != nil {
@@ -97,7 +98,8 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	}
 
 	err = dd.d.c.StartContainer(ex.container.ID, &docker.HostConfig{
-		Binds: append([]string{where + ":/hsup"}, ex.bindPairs()...),
+		Binds:           append([]string{where + ":/hsup"}, ex.bindPairs()...),
+		PublishAllPorts: true,
 	})
 	if err != nil {
 		log.Fatal(err)
