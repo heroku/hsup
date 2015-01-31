@@ -73,8 +73,8 @@ func dump() {
 		}
 
 		// Trim terminating newlines of records for
-		// compactness and consistency.  This is common for
-		// records emitted by the "log" package.
+		// compactness and consistency.  Terminating newlines
+		// are seen in records emitted by the "log" package.
 		switch r[last] {
 		case '\n':
 			os.Stderr.WriteString(r[:last])
