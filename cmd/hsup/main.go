@@ -72,14 +72,13 @@ func dump() {
 			continue
 		}
 
-		// Trim terminating newlines of records for
-		// compactness and consistency.  Terminating newlines
-		// are seen in records emitted by the "log" package.
-		switch r[last] {
-		case '\n':
-			os.Stderr.WriteString(r[:last])
-		default:
-			os.Stderr.WriteString(r + "\n")
+		// Insert terminating newlines of records for
+		// consistency.  Terminating newlines are seen in
+		// records emitted by the "log" package and are absent
+		// from direct uses of "diag."
+		os.Stderr.WriteString(r)
+		if r[last] != '\n' {
+			os.Stderr.WriteString("\n")
 		}
 	}
 }
