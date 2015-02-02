@@ -33,6 +33,7 @@ type Diag struct {
 	pos int
 }
 
+// New creates a Diag value, holding retentionSz bytes.
 func New(retentionSz int) *Diag {
 	if retentionSz <= 0 {
 		panic("Diag requires a zero, non-negative size.  " +
@@ -41,10 +42,14 @@ func New(retentionSz int) *Diag {
 	return &Diag{buf: make([]byte, retentionSz), pos: 0}
 }
 
+// Logf writes to the ring buffer.  Arguments are handled in the
+// manner of fmt.Printf.
 func (dg *Diag) Logf(f string, rest ...interface{}) {
 	dg.Log(fmt.Sprintf(f, rest...))
 }
 
+// Log writes to the ring buffer.  Arguments are handled in the manner
+// of fmt.Print.
 func (dg *Diag) Log(values ...interface{}) {
 	dg.l.Lock()
 	defer dg.l.Unlock()
@@ -73,6 +78,7 @@ func (dg *Diag) Log(values ...interface{}) {
 		i %= len(dg.buf)
 	}
 }
+
 func (dg *Diag) add(s string) {
 	for i := 0; i < len(s); i++ {
 		dg.buf[dg.pos] = s[i]
@@ -81,6 +87,9 @@ func (dg *Diag) add(s string) {
 	}
 }
 
+// Contents copies and returns elements in the ring buffer.  Each call
+// to Log/Logf/Write is represented as an element of the returned
+// slice.
 func (dg *Diag) Contents() []string {
 	c := make([]byte, len(dg.buf))
 
@@ -94,6 +103,7 @@ func (dg *Diag) Contents() []string {
 	return tmp.unsyncRecords()
 }
 
+// Write implements the Writer interface.
 func (dg *Diag) Write(p []byte) (n int, err error) {
 	dg.Log(string(p))
 	return len(p), nil
