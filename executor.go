@@ -70,7 +70,7 @@ func (e *Executor) dlog(values ...interface{}) {
 }
 
 func (e *Executor) Trigger(input DynoInput) {
-	e.dlog("trigger", e, input)
+	e.dlog("trigger", fmt.Sprintf("%#v", e), input)
 	select {
 	case e.NewInput <- input:
 	case <-e.Complete:
@@ -86,7 +86,7 @@ func (e *Executor) wait() {
 }
 
 func (e *Executor) Tick() (err error) {
-	e.dlog("waiting for tick...", e.State)
+	e.dlog("waiting for tick... (current state:", e.State.String()+")")
 	input := <-e.NewInput
 	e.dlog("ticking with input", e.State)
 
