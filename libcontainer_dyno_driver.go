@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -314,6 +315,9 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 	}
 	args := []string{"/tmp/hsup"}
 	container.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
+
+	runtime.LockOSThread() // required by namespaces.Init
+
 	// TODO: clean up /tmp/hsup and /tmp/slug.tgz after abspath reads them
 	return namespaces.Init(
 		&container, container.RootFs, "",
