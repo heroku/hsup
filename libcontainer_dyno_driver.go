@@ -3,7 +3,9 @@
 package hsup
 
 import (
+	"bytes"
 	"encoding/gob"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -96,11 +98,14 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}
 
 	// stack image is the rootFS
-	// TODO: GC needs to umount this
 	if err := syscall.Mount(
 		stackImagePath, rootFSPath, "bind",
 		syscall.MS_RDONLY|syscall.MS_BIND, "",
 	); err != nil {
+		return err
+	}
+
+	if err := createPasswdWithDynoUser(stackImagePath, dataPath); err != nil {
 		return err
 	}
 
@@ -174,6 +179,36 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}()
 
 	return nil
+}
+
+func createPasswdWithDynoUser(stackImagePath, dataPath string) error {
+	var contents bytes.Buffer
+	original, err := os.Open(filepath.Join(stackImagePath, "etc", "passwd"))
+	if err != nil {
+		return err
+	}
+	defer original.Close()
+
+	if _, err := contents.ReadFrom(original); err != nil {
+		return err
+	}
+	// TODO: allocate a free uid. It is currently hardcoded to 1000
+	dynoUser := fmt.Sprintf("\ndyno:x:1000:1000::/app:/bin/bash\n")
+	if _, err := contents.WriteString(dynoUser); err != nil {
+		return err
+	}
+
+	dst, err := os.Create(filepath.Join(dataPath, "passwd"))
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	if err := dst.Chmod(0644); err != nil {
+		return err
+	}
+
+	_, err = contents.WriteTo(dst)
+	return err
 }
 
 func (dd *LibContainerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
@@ -361,6 +396,14 @@ func containerConfig(
 					Source: filepath.Join(
 						dataPath,
 						"var", "tmp",
+					),
+				},
+				{
+					Type:        "bind",
+					Destination: "/etc/passwd",
+					Writable:    false,
+					Source: filepath.Join(
+						dataPath, "passwd",
 					),
 				},
 				{
