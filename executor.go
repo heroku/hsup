@@ -52,6 +52,7 @@ type Executor struct {
 	container *docker.Container
 
 	// libcontainer dyno driver properties
+	uid, gid      int
 	lcStatus      chan *ExitStatus
 	waitStartup   chan struct{}
 	waitWait      chan struct{}
