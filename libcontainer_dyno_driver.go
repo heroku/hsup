@@ -65,7 +65,12 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 }
 
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
-	containerUUID := uuid.New()
+	var (
+		containerUUID = uuid.New()
+		// TODO: do not hardcode these, assign unique free uids
+		uid = 1000
+		gid = 1000
+	)
 	ex.containerUUID = containerUUID
 	stackImagePath, err := CurrentStackImagePath(
 		dd.stacksDir, ex.Release.stack,
@@ -77,22 +82,20 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err := os.MkdirAll(dataPath, 0755); err != nil {
 		return err
 	}
-	var (
-		appPath    = filepath.Join(dataPath, "app")
-		tmpPath    = filepath.Join(dataPath, "tmp")
-		varTmpPath = filepath.Join(dataPath, "var", "tmp")
-		rootFSPath = filepath.Join(dataPath, "root")
-	)
-	// TODO: chown to the unprivileged user
-	if err := os.MkdirAll(appPath, 0755); err != nil {
-		return err
+	writeablePaths := []string{
+		filepath.Join(dataPath, "app"),
+		filepath.Join(dataPath, "tmp"),
+		filepath.Join(dataPath, "var", "tmp"),
 	}
-	if err := os.MkdirAll(tmpPath, 0755); err != nil {
-		return err
+	for _, path := range writeablePaths {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return err
+		}
+		if err := os.Chown(path, uid, gid); err != nil {
+			return err
+		}
 	}
-	if err := os.MkdirAll(varTmpPath, 0755); err != nil {
-		return err
-	}
+	rootFSPath := filepath.Join(dataPath, "root")
 	if err := os.MkdirAll(rootFSPath, 0755); err != nil {
 		return err
 	}
@@ -111,11 +114,12 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 
 	// TODO: inject /tmp/slug.tgz if local
 
-	where, err := filepath.Abs(linuxAmd64Path())
+	outsideContainer, err := filepath.Abs(linuxAmd64Path())
 	if err != nil {
 		return err
 	}
-	if err := copyFile(where, filepath.Join(tmpPath, "hsup"), 0755); err != nil {
+	insideContainer := filepath.Join(dataPath, "tmp", "hsup")
+	if err := copyFile(outsideContainer, insideContainer, 0755); err != nil {
 		return err
 	}
 
@@ -128,7 +132,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 
 	cfgReader, cfgWriter, err := os.Pipe()
 	initCtx := &containerInit{
-		hsupBinaryPath: where,
+		hsupBinaryPath: outsideContainer,
 		ex:             ex,
 		configPipe:     cfgReader,
 	}
@@ -161,14 +165,10 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := syscall.Unmount(rootFSPath, 0); err != nil {
 			log.Printf("unmount error: %#+v", err)
 		}
-		if err := os.RemoveAll(appPath); err != nil {
-			log.Printf("remove all error: %#+v", err)
-		}
-		if err := os.RemoveAll(tmpPath); err != nil {
-			log.Printf("remove all error: %#+v", err)
-		}
-		if err := os.RemoveAll(varTmpPath); err != nil {
-			log.Printf("remove all error: %#+v", err)
+		for _, path := range writeablePaths {
+			if err := os.RemoveAll(path); err != nil {
+				log.Printf("remove all error: %#+v", err)
+			}
 		}
 		if err := os.RemoveAll(dataPath); err != nil {
 			log.Printf("remove all error: %#+v", err)
@@ -348,7 +348,7 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 		FormName:    ex.ProcessType,
 		LogplexURL:  ex.logplexURLString(),
 	}
-	args := []string{"/tmp/hsup"}
+	args := []string{"/usr/bin/setuidgid", "dyno", "/tmp/hsup"}
 	container.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
 
 	runtime.LockOSThread() // required by namespaces.Init
