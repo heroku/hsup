@@ -112,12 +112,12 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err := os.MkdirAll(dataPath, 0755); err != nil {
 		return err
 	}
-	writeablePaths := []string{
+	writablePaths := []string{
 		filepath.Join(dataPath, "app"),
 		filepath.Join(dataPath, "tmp"),
 		filepath.Join(dataPath, "var", "tmp"),
 	}
-	for _, path := range writeablePaths {
+	for _, path := range writablePaths {
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return err
 		}
@@ -197,7 +197,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := syscall.Unmount(rootFSPath, 0); err != nil {
 			log.Printf("unmount error: %#+v", err)
 		}
-		for _, path := range writeablePaths {
+		for _, path := range writablePaths {
 			if err := os.RemoveAll(path); err != nil {
 				log.Printf("remove all error: %#+v", err)
 			}
