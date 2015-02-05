@@ -108,7 +108,7 @@ func TestColdStartLoaded(t *testing.T) {
 	}
 
 	if !update {
-		t.Fatal()
+		t.FailNow()
 	}
 
 	// Check Unmarshal contents.
@@ -138,17 +138,17 @@ func TestColdStartNew(t *testing.T) {
 
 	// Verify promotion of "new" to "loaded"
 	if _, err := os.Stat(c.loadedPath()); os.IsNotExist(err) {
-		t.Fatal()
+		t.FailNow()
 	}
 
 	if _, err := os.Stat(c.newPath()); !os.IsNotExist(err) {
-		t.Fatal()
+		t.FailNow()
 	}
 
 	// Check Unmarshal contents.
 	db := *c.Snapshot().(*AppSerializable)
 	if fmt.Sprintf("%+v", db) != defaultFixture.repr {
-		t.Fatal()
+		t.FailNow()
 	}
 }
 
@@ -171,18 +171,18 @@ func TestLoadCycle(t *testing.T) {
 
 	// Verify promotion of "new" to "loaded"
 	if _, err := os.Stat(c.loadedPath()); os.IsNotExist(err) {
-		t.Fatal()
+		t.FailNow()
 	}
 
 	if _, err := os.Stat(c.newPath()); !os.IsNotExist(err) {
-		t.Fatal()
+		t.FailNow()
 	}
 
 	// Check Unmarshal contents.
 	db := *c.Snapshot().(*AppSerializable)
 	result := fmt.Sprintf("%+v", db)
 	if result != defaultFixture.repr {
-		t.Fatal()
+		t.FailNow()
 	}
 
 	// Check no-op load.
@@ -200,7 +200,7 @@ func TestLoadCycle(t *testing.T) {
 
 	update, err = c.Notify()
 	if err != nil {
-		t.Fatal()
+		t.FailNow()
 	}
 
 	if !update {
@@ -228,6 +228,6 @@ func TestLoadCycle(t *testing.T) {
 	}
 
 	if _, err := os.Stat(c.errPath()); err != nil {
-		t.Fatal()
+		t.FailNow()
 	}
 }
