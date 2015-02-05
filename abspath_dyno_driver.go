@@ -36,7 +36,8 @@ if [ -d /app/.profile.d ]; then
 fi
 
 rm $0
-exec bash -c "$@"
+cmd="$@" # trick to disable word splitting
+exec bash -c "$cmd"
 `
 
 type profileRunner struct {
