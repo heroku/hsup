@@ -17,7 +17,9 @@ func (dd *SimpleDynoDriver) Build(release *Release) error {
 }
 
 func (dd *SimpleDynoDriver) Start(ex *Executor) error {
-	ex.cmd = exec.Command(ex.Args[0], ex.Args[1:]...)
+	args := []string{"bash", "-c"}
+	args = append(args, ex.Args...)
+	ex.cmd = exec.Command(args[0], args[1:]...)
 
 	ex.cmd.Stdin = os.Stdin
 	ex.cmd.Stdout = os.Stdout

@@ -36,7 +36,7 @@ if [ -d /app/.profile.d ]; then
 fi
 
 rm $0
-exec "$@"
+exec bash -c "$@"
 `
 
 type profileRunner struct {
