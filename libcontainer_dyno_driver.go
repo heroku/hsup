@@ -3,11 +3,20 @@
 package hsup
 
 import (
+	"bytes"
+	crand "crypto/rand"
 	"encoding/gob"
+	"errors"
+	"fmt"
 	"log"
+	"math"
+	"math/big"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -25,12 +34,18 @@ type LibContainerDynoDriver struct {
 	workDir       string
 	stacksDir     string
 	containersDir string
+	uidsDir       string
+	minUID        int
+	maxUID        int
+
+	rng *rand.Rand
 }
 
 func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) {
 	var (
 		stacksDir     = filepath.Join(workDir, "stacks")
 		containersDir = filepath.Join(workDir, "containers")
+		uidsDir       = filepath.Join(workDir, "uids")
 	)
 	if err := os.MkdirAll(stacksDir, 0755); err != nil {
 		return nil, err
@@ -38,10 +53,26 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err := os.MkdirAll(containersDir, 0755); err != nil {
 		return nil, err
 	}
+	if err := os.MkdirAll(uidsDir, 0755); err != nil {
+		return nil, err
+	}
+
+	// use a seed with some entropy from crypt/rand to initialize a cheaper
+	// math/rand rng
+	seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
+	if err != nil {
+		return nil, err
+	}
+	rng := rand.New(rand.NewSource(seed.Int64()))
+
 	return &LibContainerDynoDriver{
 		workDir:       workDir,
 		stacksDir:     stacksDir,
 		containersDir: containersDir,
+		uidsDir:       uidsDir,
+		minUID:        3000,
+		maxUID:        60000,
+		rng:           rng,
 	}, nil
 }
 
@@ -64,6 +95,13 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
 	ex.containerUUID = containerUUID
+	uid, gid, err := dd.findFreeUIDGID()
+	if err != nil {
+		return err
+	}
+	ex.uid = uid
+	ex.gid = gid
+
 	stackImagePath, err := CurrentStackImagePath(
 		dd.stacksDir, ex.Release.stack,
 	)
@@ -74,28 +112,25 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err := os.MkdirAll(dataPath, 0755); err != nil {
 		return err
 	}
-	var (
-		appPath    = filepath.Join(dataPath, "app")
-		tmpPath    = filepath.Join(dataPath, "tmp")
-		varTmpPath = filepath.Join(dataPath, "var", "tmp")
-		rootFSPath = filepath.Join(dataPath, "root")
-	)
-	// TODO: chown to the unprivileged user
-	if err := os.MkdirAll(appPath, 0755); err != nil {
-		return err
+	writablePaths := []string{
+		filepath.Join(dataPath, "app"),
+		filepath.Join(dataPath, "tmp"),
+		filepath.Join(dataPath, "var", "tmp"),
 	}
-	if err := os.MkdirAll(tmpPath, 0755); err != nil {
-		return err
+	for _, path := range writablePaths {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return err
+		}
+		if err := os.Chown(path, int(uid), int(gid)); err != nil {
+			return err
+		}
 	}
-	if err := os.MkdirAll(varTmpPath, 0755); err != nil {
-		return err
-	}
+	rootFSPath := filepath.Join(dataPath, "root")
 	if err := os.MkdirAll(rootFSPath, 0755); err != nil {
 		return err
 	}
 
 	// stack image is the rootFS
-	// TODO: GC needs to umount this
 	if err := syscall.Mount(
 		stackImagePath, rootFSPath, "bind",
 		syscall.MS_RDONLY|syscall.MS_BIND, "",
@@ -103,13 +138,20 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 
+	if err := createPasswdWithDynoUser(
+		stackImagePath, dataPath, uid, gid,
+	); err != nil {
+		return err
+	}
+
 	// TODO: inject /tmp/slug.tgz if local
 
-	where, err := filepath.Abs(linuxAmd64Path())
+	outsideContainer, err := filepath.Abs(linuxAmd64Path())
 	if err != nil {
 		return err
 	}
-	if err := copyFile(where, filepath.Join(tmpPath, "hsup"), 0755); err != nil {
+	insideContainer := filepath.Join(dataPath, "tmp", "hsup")
+	if err := copyFile(outsideContainer, insideContainer, 0755); err != nil {
 		return err
 	}
 
@@ -122,7 +164,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 
 	cfgReader, cfgWriter, err := os.Pipe()
 	initCtx := &containerInit{
-		hsupBinaryPath: where,
+		hsupBinaryPath: outsideContainer,
 		ex:             ex,
 		configPipe:     cfgReader,
 	}
@@ -155,24 +197,86 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := syscall.Unmount(rootFSPath, 0); err != nil {
 			log.Printf("unmount error: %#+v", err)
 		}
-		if err := os.RemoveAll(appPath); err != nil {
-			log.Printf("remove all error: %#+v", err)
-		}
-		if err := os.RemoveAll(tmpPath); err != nil {
-			log.Printf("remove all error: %#+v", err)
-		}
-		if err := os.RemoveAll(varTmpPath); err != nil {
-			log.Printf("remove all error: %#+v", err)
+		for _, path := range writablePaths {
+			if err := os.RemoveAll(path); err != nil {
+				log.Printf("remove all error: %#+v", err)
+			}
 		}
 		if err := os.RemoveAll(dataPath); err != nil {
 			log.Printf("remove all error: %#+v", err)
 		}
+
+		// free the UID
+		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(ex.uid))
+		// it's probably safe to ignore errors here, the file is
+		// probably gone. Worst case scenario, this uid won't be be
+		// reused.
+		os.Remove(uidFile)
 
 		ex.lcStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.lcStatus)
 	}()
 
 	return nil
+}
+
+// findFreeUIDGID optimistically locks uid and gid pairs until one is
+// successfully allocated. It relies on atomic filesystem operations to
+// guarantee that multiple concurrent tasks will never allocate the same uid/gid
+// pair.
+func (dd *LibContainerDynoDriver) findFreeUIDGID() (int, int, error) {
+	var (
+		interval   = dd.maxUID - dd.minUID + 1
+		maxRetries = 5 * interval
+	)
+	// try random uids in the [minUID, maxUID] interval until one works.
+	// With a good random distribution, a few times the number of possible
+	// uids should be enough attempts to guarantee that all possible uids
+	// will be eventually tried.
+	for i := 0; i < maxRetries; i++ {
+		uid := dd.rng.Intn(interval) + dd.minUID
+		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(uid))
+		// check if free by optimistically locking this uid
+		f, err := os.OpenFile(uidFile, os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			continue // already allocated by someone else
+		}
+		if err := f.Close(); err != nil {
+			return 0, 0, err
+		}
+		return uid, uid, nil
+	}
+	return 0, 0, errors.New("no free UID available")
+}
+
+func createPasswdWithDynoUser(stackImagePath, dataPath string, uid, gid int) error {
+	var contents bytes.Buffer
+	original, err := os.Open(filepath.Join(stackImagePath, "etc", "passwd"))
+	if err != nil {
+		return err
+	}
+	defer original.Close()
+
+	if _, err := contents.ReadFrom(original); err != nil {
+		return err
+	}
+	// TODO: allocate a free uid. It is currently hardcoded to 1000
+	dynoUser := fmt.Sprintf("\ndyno:x:%d:%d::/app:/bin/bash\n", uid, gid)
+	if _, err := contents.WriteString(dynoUser); err != nil {
+		return err
+	}
+
+	dst, err := os.Create(filepath.Join(dataPath, "passwd"))
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	if err := dst.Chmod(0644); err != nil {
+		return err
+	}
+
+	_, err = contents.WriteTo(dst)
+	return err
 }
 
 func (dd *LibContainerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
@@ -312,8 +416,11 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 		FormName:    ex.ProcessType,
 		LogplexURL:  ex.logplexURLString(),
 	}
-	args := []string{"/tmp/hsup"}
+	args := []string{"/usr/bin/setuidgid", "dyno", "/tmp/hsup"}
 	container.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
+
+	runtime.LockOSThread() // required by namespaces.Init
+
 	// TODO: clean up /tmp/hsup and /tmp/slug.tgz after abspath reads them
 	return namespaces.Init(
 		&container, container.RootFs, "",
@@ -357,6 +464,14 @@ func containerConfig(
 					Source: filepath.Join(
 						dataPath,
 						"var", "tmp",
+					),
+				},
+				{
+					Type:        "bind",
+					Destination: "/etc/passwd",
+					Writable:    false,
+					Source: filepath.Join(
+						dataPath, "passwd",
 					),
 				},
 				{
