@@ -71,7 +71,7 @@ func (e *Executor) dlog(values ...interface{}) {
 }
 
 func (e *Executor) Trigger(input DynoInput) {
-	e.dlog("trigger", fmt.Sprintf("%#v", e), input)
+	e.dlog("trigger", input)
 	select {
 	case e.NewInput <- input:
 	case <-e.Complete:
