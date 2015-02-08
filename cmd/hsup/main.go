@@ -327,6 +327,10 @@ func main() {
 	case controlGob != "":
 		poller = &hsup.GobNotifier{Payload: controlGob}
 	case token != "":
+		if hs.App.Name == "" {
+			log.Fatal("specify --app")
+		}
+
 		heroku.DefaultTransport.Username = ""
 		heroku.DefaultTransport.Password = token
 		cl := heroku.NewService(heroku.DefaultClient)
