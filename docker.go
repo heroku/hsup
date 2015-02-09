@@ -125,7 +125,7 @@ func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 
 	// Generate Dockerfile and place in archive.
 	genv := "HSUP_CONTROL_GOB=" + hs.ToBase64Gob()
-	args := []string{"setuidgid", "app", "env", genv, "/tmp/hsup"}
+	args := []string{"setuidgid", "dyno", "env", genv, "/tmp/hsup"}
 	argText, err := json.Marshal(args)
 	if err != nil {
 		panic(fmt.Sprintln("could not marshal argv:", args))
@@ -140,7 +140,7 @@ func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 
 	dockerContents := fmt.Sprintf(`FROM %s
 COPY hsup /tmp/hsup
-RUN groupadd -r app && useradd -r -g app app && mkdir /app && chown app:app /app && chmod a+x /tmp/hsup
+RUN groupadd -r dyno && useradd -r -g dyno dyno && mkdir /app && chown dyno:dyno /app && chmod a+x /tmp/hsup
 %s
 RUN %s
 RUN rm /tmp/hsup

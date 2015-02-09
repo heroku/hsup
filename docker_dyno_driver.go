@@ -80,7 +80,7 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	container, err := dd.d.c.CreateContainer(docker.CreateContainerOptions{
 		Name: name,
 		Config: &docker.Config{
-			Cmd:          []string{"setuidgid", "app", "/hsup"},
+			Cmd:          []string{"setuidgid", "dyno", "/hsup"},
 			Env:          []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()},
 			Image:        ex.Release.imageName,
 			Volumes:      vols,
