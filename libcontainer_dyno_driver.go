@@ -4,20 +4,12 @@ package hsup
 
 import (
 	"bytes"
-	crand "crypto/rand"
-	"encoding/binary"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"log"
-	"math"
-	"math/big"
-	"math/rand"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -31,33 +23,17 @@ import (
 	"github.com/docker/libcontainer/namespaces"
 )
 
-var (
-	// 172.16.0.28/30
-	basePrivateIP = net.IPNet{
-		IP:   net.IPv4(172, 16, 0, 28).To4(),
-		Mask: net.CIDRMask(30, 32),
-	}
-)
-
 type LibContainerDynoDriver struct {
 	workDir       string
 	stacksDir     string
 	containersDir string
-	uidsDir       string
-
-	// (maxUID-minUID) should always be smaller than 2 ** 18
-	// see privateNetForUID for details
-	minUID int
-	maxUID int
-
-	rng *rand.Rand
+	allocator     *Allocator
 }
 
 func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) {
 	var (
 		stacksDir     = filepath.Join(workDir, "stacks")
 		containersDir = filepath.Join(workDir, "containers")
-		uidsDir       = filepath.Join(workDir, "uids")
 	)
 	if err := os.MkdirAll(stacksDir, 0755); err != nil {
 		return nil, err
@@ -65,26 +41,15 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err := os.MkdirAll(containersDir, 0755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(uidsDir, 0755); err != nil {
-		return nil, err
-	}
-
-	// use a seed with some entropy from crypt/rand to initialize a cheaper
-	// math/rand rng
-	seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
+	allocator, err := NewAllocator(workDir)
 	if err != nil {
 		return nil, err
 	}
-	rng := rand.New(rand.NewSource(seed.Int64()))
-
 	return &LibContainerDynoDriver{
 		workDir:       workDir,
 		stacksDir:     stacksDir,
 		containersDir: containersDir,
-		uidsDir:       uidsDir,
-		minUID:        3000,
-		maxUID:        60000,
-		rng:           rng,
+		allocator:     allocator,
 	}, nil
 }
 
@@ -107,7 +72,7 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
 	ex.containerUUID = containerUUID
-	uid, gid, err := dd.findFreeUIDGID()
+	uid, gid, err := dd.allocator.ReserveUID()
 	if err != nil {
 		return err
 	}
@@ -216,79 +181,15 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			log.Printf("remove all error: %#+v", err)
 		}
 
-		// free the UID
-		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(uid))
-		// it's probably safe to ignore errors here, the file is
-		// probably gone. Worst case scenario, this uid won't be be
-		// reused.
-		os.Remove(uidFile)
+		// it's probably safe to ignore errors here. Worst case
+		// scenario, this uid won't be be reused.
+		dd.allocator.FreeUID(uid)
 
 		ex.lcStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.lcStatus)
 	}()
 
 	return nil
-}
-
-// findFreeUIDGID optimistically locks uid and gid pairs until one is
-// successfully allocated. It relies on atomic filesystem operations to
-// guarantee that multiple concurrent tasks will never allocate the same uid/gid
-// pair.
-func (dd *LibContainerDynoDriver) findFreeUIDGID() (int, int, error) {
-	var (
-		interval   = dd.maxUID - dd.minUID + 1
-		maxRetries = 5 * interval
-	)
-	// try random uids in the [minUID, maxUID] interval until one works.
-	// With a good random distribution, a few times the number of possible
-	// uids should be enough attempts to guarantee that all possible uids
-	// will be eventually tried.
-	for i := 0; i < maxRetries; i++ {
-		uid := dd.rng.Intn(interval) + dd.minUID
-		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(uid))
-		// check if free by optimistically locking this uid
-		f, err := os.OpenFile(uidFile, os.O_CREATE|os.O_EXCL, 0600)
-		if err != nil {
-			continue // already allocated by someone else
-		}
-		if err := f.Close(); err != nil {
-			return 0, 0, err
-		}
-		return uid, uid, nil
-	}
-	return 0, 0, errors.New("no free UID available")
-}
-
-// privateNetworkForUID determines which /30 IPv4 network to use for each
-// container, relying on the fact that each one has a different, unique UID
-// allocated to them.
-//
-// All /30 subnets are allocated from the 172.16/12 block (RFC1918 - Private
-// Address Space), starting at 172.16.0.28/30 to avoid clashes with IPs used by
-// AWS (eg.: the internal DNS server is 172.16.0.23 on ec2-classic). This block
-// provides at most 2**18 = 262144 subnets of size /30, then (maxUID-minUID)
-// must be always smaller than 262144.
-func (dd *LibContainerDynoDriver) privateNetForUID(uid int) (*net.IPNet, error) {
-	shift := uint32(uid - dd.minUID)
-	var asInt uint32
-	base := bytes.NewReader(basePrivateIP.IP.To4())
-	if err := binary.Read(base, binary.BigEndian, &asInt); err != nil {
-		return nil, err
-	}
-
-	// pick a /30 block
-	asInt >>= 2
-	asInt += shift
-	asInt <<= 2
-
-	var ip bytes.Buffer
-	if err := binary.Write(&ip, binary.BigEndian, &asInt); err != nil {
-		return nil, err
-	}
-	return &net.IPNet{
-		IP:   net.IP(ip.Bytes()),
-		Mask: basePrivateIP.Mask,
-	}, nil
 }
 
 func createPasswdWithDynoUser(stackImagePath, dataPath string, uid, gid int) error {
