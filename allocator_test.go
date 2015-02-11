@@ -1,5 +1,3 @@
-// +build linux
-
 package hsup
 
 import (
@@ -15,17 +13,17 @@ import (
 // avoid clashes with IPs used by AWS (e.g.: the internal DNS server on
 // ec2-classic is 172.16.0.23).
 func TestFirstAvailablePrivateNet(t *testing.T) {
-	workDir, err := ioutil.TempDir("", "hsup-libcontainer-test")
+	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	driver, err := NewLibContainerDynoDriver(workDir)
+	allocator, err := NewAllocator(workDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	minUID := 3000
-	net, err := driver.privateNetForUID(minUID)
+	net, err := allocator.privateNetForUID(minUID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,19 +37,19 @@ func TestFirstAvailablePrivateNet(t *testing.T) {
 
 // RFC1918: 172.16/12 private address space
 func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
-	workDir, err := ioutil.TempDir("", "hsup-libcontainer-test")
+	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	driver, err := NewLibContainerDynoDriver(workDir)
+	allocator, err := NewAllocator(workDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	minUID := 3000
 
-	one, err := driver.privateNetForUID(minUID + 1)
+	one, err := allocator.privateNetForUID(minUID + 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +58,7 @@ func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
 		Mask: net.CIDRMask(30, 32),
 	})
 
-	twentyThree, err := driver.privateNetForUID(minUID + 23)
+	twentyThree, err := allocator.privateNetForUID(minUID + 23)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +67,7 @@ func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
 		Mask: net.CIDRMask(30, 32),
 	})
 
-	big, err := driver.privateNetForUID(minUID + 2036)
+	big, err := allocator.privateNetForUID(minUID + 2036)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,17 +85,17 @@ func checkIPNet(t *testing.T, got, expected *net.IPNet) {
 }
 
 func TestFindsAvailableUIDs(t *testing.T) {
-	workDir, err := ioutil.TempDir("", "hsup-libcontainer-test")
+	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	driver, err := NewLibContainerDynoDriver(workDir)
+	allocator, err := NewAllocator(workDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	driver.minUID = 1
-	driver.maxUID = 3
+	allocator.minUID = 1
+	allocator.maxUID = 3
 
 	// some uids are already allocated...
 	if err := createUIDFile(workDir, 1); err != nil {
@@ -108,7 +106,7 @@ func TestFindsAvailableUIDs(t *testing.T) {
 	}
 
 	// uid=2 is the only available
-	uid, gid, err := driver.findFreeUIDGID()
+	uid, gid, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,17 +124,17 @@ func TestFindsAvailableUIDs(t *testing.T) {
 }
 
 func TestOnlyUsesFreeUIDs(t *testing.T) {
-	workDir, err := ioutil.TempDir("", "hsup-libcontainer-test")
+	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	driver, err := NewLibContainerDynoDriver(workDir)
+	allocator, err := NewAllocator(workDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	driver.minUID = 3000
-	driver.maxUID = 3004
+	allocator.minUID = 3000
+	allocator.maxUID = 3004
 
 	// some uids are already allocated...
 	if err := createUIDFile(workDir, 3002); err != nil {
@@ -146,7 +144,7 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first, _, err := driver.findFreeUIDGID()
+	first, _, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +152,7 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 		t.Fatalf("a uid file to lock uid=%d wasn't created", first)
 	}
 
-	second, _, err := driver.findFreeUIDGID()
+	second, _, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +164,7 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 			" Failed %d != %d", first, second)
 	}
 
-	third, _, err := driver.findFreeUIDGID()
+	third, _, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
