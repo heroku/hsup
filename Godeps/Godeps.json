@@ -81,8 +81,8 @@
 		},
 		{
 			"ImportPath": "github.com/docker/libcontainer",
-			"Comment": "v1.4.0-92-gcab4b9b",
-			"Rev": "cab4b9bce1bece1b6c575e1826f3e5b221faebf3"
+			"Comment": "v1.4.0-126-gf19e93e",
+			"Rev": "f19e93e94e6e5dd08c77bf8e04c468ed594798d0"
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
@@ -108,7 +108,7 @@
 		},
 		{
 			"ImportPath": "github.com/syndtr/gocapability/capability",
-			"Rev": "3c85049eaeb429febe7788d9c7aac42322a377fe"
+			"Rev": "1cf3ac4dc459ad37f4f6f76d95d5cb54f7ffdc79"
 		},
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
