@@ -60,7 +60,6 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 		FormName:    ex.ProcessType,
 		LogplexURL:  ex.logplexURLString(),
 	}
-	args := []string{"/usr/bin/setuidgid", "dyno", "/tmp/hsup"}
 	container.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
 
 	runtime.LockOSThread() // required by namespaces.Init
@@ -68,7 +67,7 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 	// TODO: clean up /tmp/hsup and /tmp/slug.tgz after abspath reads them
 	return namespaces.Init(
 		&container, container.RootFs, "",
-		os.NewFile(3, "controlPipe"), args,
+		os.NewFile(3, "controlPipe"), []string{"/tmp/hsup"},
 	)
 }
 

@@ -98,8 +98,6 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err != nil {
 		return err
 	}
-	ex.uid = uid
-	ex.gid = gid
 
 	stackImagePath, err := CurrentStackImagePath(
 		dd.stacksDir, ex.Release.stack,
@@ -120,7 +118,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return err
 		}
-		if err := os.Chown(path, int(uid), int(gid)); err != nil {
+		if err := os.Chown(path, uid, gid); err != nil {
 			return err
 		}
 	}
@@ -168,7 +166,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		configPipe:     cfgReader,
 	}
 	container := containerConfig(
-		containerUUID, dataPath, ex.Release.ConfigSlice(),
+		containerUUID, uid, gid, dataPath, ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
@@ -206,7 +204,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		}
 
 		// free the UID
-		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(ex.uid))
+		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(uid))
 		// it's probably safe to ignore errors here, the file is
 		// probably gone. Worst case scenario, this uid won't be be
 		// reused.
@@ -369,12 +367,13 @@ func (ctx *containerInit) startCallback() {
 }
 
 func containerConfig(
-	containerUUID, dataPath string, env []string,
+	containerUUID string,
+	uid, gid int,
+	dataPath string,
+	env []string,
 ) *libcontainer.Config {
 	return &libcontainer.Config{
 		MountConfig: &libcontainer.MountConfig{
-			MountLabel: containerUUID,
-			PivotDir:   "/tmp",
 			Mounts: []*mount.Mount{
 				{
 					Type:        "bind",
@@ -412,11 +411,13 @@ func containerConfig(
 					Source:      "/etc/resolv.conf",
 				},
 			},
+			MountLabel:  containerUUID,
 			DeviceNodes: devices.DefaultSimpleDevices,
+			PivotDir:    "/tmp",
 		},
 		RootFs:   filepath.Join(dataPath, "root"),
 		Hostname: containerUUID,
-		User:     "0:0",
+		User:     fmt.Sprintf("%d:%d", uid, gid),
 		Env:      env,
 		Namespaces: []libcontainer.Namespace{
 			{Type: "NEWIPC"},
