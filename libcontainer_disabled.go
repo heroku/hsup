@@ -4,10 +4,8 @@ package hsup
 
 import "errors"
 
-var (
-	ErrDriverNotSupported = errors.New(
-		"the libcontainer driver is not supported on this platform",
-	)
+var ErrDriverNotSupported = errors.New(
+	"the libcontainer driver is not supported on this platform",
 )
 
 type LibContainerDynoDriver struct{}
