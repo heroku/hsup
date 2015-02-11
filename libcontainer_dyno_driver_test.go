@@ -3,12 +3,88 @@
 package hsup
 
 import (
+	"bytes"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 )
+
+// avoid clashes with IPs used by AWS (e.g.: the internal DNS server on
+// ec2-classic is 172.16.0.23).
+func TestFirstAvailablePrivateNet(t *testing.T) {
+	workDir, err := ioutil.TempDir("", "hsup-libcontainer-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(workDir)
+	driver, err := NewLibContainerDynoDriver(workDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minUID := 3000
+	net, err := driver.privateNetForUID(minUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := basePrivateIP
+	if !bytes.Equal(net.IP, expected.IP) ||
+		!bytes.Equal(net.Mask, expected.Mask) {
+		t.Fatalf("the first available private network is not"+
+			" 172.16.0.28/30. Got %#+v, Want %#+v", net, expected)
+	}
+}
+
+// RFC1918: 172.16/12 private address space
+func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
+	workDir, err := ioutil.TempDir("", "hsup-libcontainer-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(workDir)
+	driver, err := NewLibContainerDynoDriver(workDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	minUID := 3000
+
+	one, err := driver.privateNetForUID(minUID + 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, one, &net.IPNet{
+		IP:   net.IPv4(172, 16, 0, 32).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+
+	twentyThree, err := driver.privateNetForUID(minUID + 23)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, twentyThree, &net.IPNet{
+		IP:   net.IPv4(172, 16, 0, 120).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+
+	big, err := driver.privateNetForUID(minUID + 2036)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, big, &net.IPNet{
+		IP:   net.IPv4(172, 16, 31, 236).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+}
+
+func checkIPNet(t *testing.T, got, expected *net.IPNet) {
+	if !bytes.Equal(got.IP, expected.IP) ||
+		!bytes.Equal(got.Mask, expected.Mask) {
+		t.Fatalf("Expected IP: %s. Got: %s.", expected, got)
+	}
+}
 
 func TestFindsAvailableUIDs(t *testing.T) {
 	workDir, err := ioutil.TempDir("", "hsup-libcontainer-test")
