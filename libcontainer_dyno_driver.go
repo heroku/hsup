@@ -336,13 +336,13 @@ func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
 					FType:     ctx.ex.ProcessType,
 				},
 			},
+			LogplexURL: ctx.ex.logplexURLString(),
 		},
 		OneShot:     true,
 		StartNumber: ctx.ex.ProcessID,
 		Action:      Start,
 		Driver:      &LibContainerInitDriver{},
 		FormName:    ctx.ex.ProcessType,
-		LogplexURL:  ctx.ex.logplexURLString(),
 	}
 	cmd := exec.Command(ctx.hsupBinaryPath)
 	cmd.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}

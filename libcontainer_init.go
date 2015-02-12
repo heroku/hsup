@@ -51,6 +51,7 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 					FType:     ex.ProcessType,
 				},
 			},
+			LogplexURL: ex.logplexURLString(),
 		},
 		OneShot:     true,
 		SkipBuild:   false,
@@ -58,7 +59,6 @@ func (dd *LibContainerInitDriver) Start(ex *Executor) error {
 		Action:      Start,
 		Driver:      &AbsPathDynoDriver{},
 		FormName:    ex.ProcessType,
-		LogplexURL:  ex.logplexURLString(),
 	}
 	container.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
 

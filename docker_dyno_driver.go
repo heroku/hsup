@@ -60,12 +60,12 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 					FType:     ex.ProcessType,
 				},
 			},
+			LogplexURL: ex.logplexURLString(),
 		},
 		OneShot:     true,
 		StartNumber: ex.ProcessID,
 		Action:      Start,
 		Driver:      &AbsPathDynoDriver{},
-		LogplexURL:  ex.logplexURLString(),
 	}
 
 	// attach a timestamp as some extra entropy because container names must be

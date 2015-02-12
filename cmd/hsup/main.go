@@ -167,7 +167,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 					State:       hsup.Stopped,
 					OneShot:     p.OneShot,
 					NewInput:    make(chan hsup.DynoInput),
-					LogplexURL:  hs.MustParseLogplexURL(),
+					LogplexURL:  hs.App.MustParseLogplexURL(),
 					Binds:       hs.Binds,
 				}
 
@@ -191,7 +191,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 			OneShot:     true,
 			Status:      make(chan *hsup.ExitStatus),
 			NewInput:    make(chan hsup.DynoInput),
-			LogplexURL:  hs.MustParseLogplexURL(),
+			LogplexURL:  hs.App.MustParseLogplexURL(),
 			Binds:       hs.Binds,
 		}
 
@@ -279,7 +279,7 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 		if err != nil {
 			log.Fatalln("invalid --logplex-url format:", err)
 		}
-		dst.LogplexURL = *logplex
+		dst.App.LogplexURL = *logplex
 	}
 
 	dst.Driver = dynoDriver
