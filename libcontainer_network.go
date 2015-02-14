@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 
 	"github.com/docker/libcontainer/netlink"
@@ -37,6 +38,9 @@ func (r *Routed) Create(
 	// TODO: ensure that config.Gateway and config.Address are in the same subnet
 	if config.VethPrefix == "" {
 		return fmt.Errorf("veth prefix is not specified")
+	}
+	if err := r.enablePacketForwarding(); err != nil {
+		return err
 	}
 	name1, name2, err := createVethPair(config.VethPrefix, config.TxQueueLen)
 	if err != nil {
@@ -71,6 +75,14 @@ func (r *Routed) Initialize(
 	net *network.Network, state *network.NetworkState,
 ) error {
 	return r.Veth.Initialize(net, state)
+}
+
+func (r *Routed) enablePacketForwarding() error {
+	return ioutil.WriteFile(
+		"/proc/sys/net/ipv4/ip_forward",
+		[]byte{'1', '\n'},
+		0644,
+	)
 }
 
 // createVethPair will automatically generage two random names for
