@@ -409,11 +409,10 @@ func containerConfig(
 			// TODO: setup our own network instead of using the docker bridge
 			{
 				Address:    subnet.Host().String(),
-				Bridge:     "docker0",
-				VethPrefix: "veth",
+				VethPrefix: fmt.Sprintf("veth%d", uid),
 				Gateway:    subnet.Gateway().IP.String(),
 				Mtu:        1500,
-				Type:       "veth",
+				Type:       "routed",
 			},
 		},
 		Cgroups: &cgroups.Cgroup{
