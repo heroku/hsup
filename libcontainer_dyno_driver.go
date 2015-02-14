@@ -74,7 +74,14 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err != nil {
 		return err
 	}
-
+	sn, err := dd.allocator.privateNetForUID(uid)
+	if err != nil {
+		return err
+	}
+	subnet, err := newSmallSubnet(sn)
+	if err != nil {
+		return err
+	}
 	stackImagePath, err := CurrentStackImagePath(
 		dd.stacksDir, ex.Release.stack,
 	)
@@ -139,8 +146,13 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		ex:             ex,
 		configPipe:     cfgReader,
 	}
+
 	container := containerConfig(
-		containerUUID, uid, gid, dataPath, ex.Release.ConfigSlice(),
+		containerUUID,
+		uid, gid,
+		dataPath,
+		subnet,
+		ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
@@ -290,6 +302,7 @@ func containerConfig(
 	containerUUID string,
 	uid, gid int,
 	dataPath string,
+	subnet *smallSubnet,
 	env []string,
 ) *libcontainer.Config {
 	return &libcontainer.Config{
@@ -369,10 +382,10 @@ func containerConfig(
 			},
 			// TODO: setup our own network instead of using the docker bridge
 			{
-				Address:    "172.17.0.101/16",
+				Address:    subnet.Host().String(),
 				Bridge:     "docker0",
 				VethPrefix: "veth",
-				Gateway:    "172.17.42.1",
+				Gateway:    subnet.Gateway().IP.String(),
 				Mtu:        1500,
 				Type:       "veth",
 			},
