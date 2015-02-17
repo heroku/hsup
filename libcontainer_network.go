@@ -10,18 +10,13 @@ import (
 	"io/ioutil"
 	"net"
 
-	"github.com/docker/libcontainer/netlink"
+	"github.com/docker/docker/pkg/iptables"
 	"github.com/docker/libcontainer/network"
-	"github.com/docker/libcontainer/utils"
 )
 
 var (
 	ErrInvalidIPMask = errors.New("mask is not a /30")
 )
-
-func init() {
-	network.AddStrategy("routed", &Routed{})
-}
 
 // Routed implements libcontainer's network.NetworkStrategy interface,
 // offering containers only layer 3 connectivity to the outside world.
@@ -40,6 +35,9 @@ func (r *Routed) Create(
 		return fmt.Errorf("veth prefix is not specified")
 	}
 	if err := r.enablePacketForwarding(); err != nil {
+		return err
+	}
+	if err := r.natOutboundTraffic(); err != nil {
 		return err
 	}
 	name1, name2, err := createVethPair(config.VethPrefix, config.TxQueueLen)
@@ -85,32 +83,33 @@ func (r *Routed) enablePacketForwarding() error {
 	)
 }
 
-// createVethPair will automatically generage two random names for
-// the veth pair and ensure that they have been created
-//
-// Copied from libcontainer/network.createVethPair because it is not exported
-func createVethPair(prefix string, txQueueLen int) (name1 string, name2 string, err error) {
-	for i := 0; i < 10; i++ {
-		if name1, err = utils.GenerateRandomName(prefix, 7); err != nil {
-			return
-		}
-
-		if name2, err = utils.GenerateRandomName(prefix, 7); err != nil {
-			return
-		}
-
-		if err = network.CreateVethPair(name1, name2, txQueueLen); err != nil {
-			if err == netlink.ErrInterfaceExists {
-				continue
-			}
-
-			return
-		}
-
-		break
+func (r *Routed) natOutboundTraffic() error {
+	masquerade := []string{
+		"POSTROUTING", "-t", "nat",
+		"-s", privateSubnet.String(),
+		"-j", "MASQUERADE",
 	}
+	if !iptables.Exists(masquerade...) {
+		incl := append([]string{"-I"}, masquerade...)
+		if output, err := iptables.Raw(incl...); err != nil {
+			return err
+		} else if len(output) > 0 {
+			return &iptables.ChainError{
+				Chain:  "POSTROUTING",
+				Output: output,
+			}
+		}
+	}
+	return nil
+}
 
-	return
+func createVethPair(prefix string, txQueueLen int) (string, string, error) {
+	host := prefix
+	child := prefix + "-child"
+	if err := network.CreateVethPair(host, child, txQueueLen); err != nil {
+		return "", "", err
+	}
+	return host, child, nil
 }
 
 // smallSubnet encapsulates operations on single host /30 IPv4 networks. They
