@@ -72,7 +72,7 @@ type AppSerializable struct {
 
 	// LogplexURL specifies where to forward the supervised
 	// process Stdout and Stderr when non-empty.
-	LogplexURL string
+	LogplexURL string `json:",omitempty"`
 }
 
 // Convenience function for parsing the stringy LogplexURL.  This is
