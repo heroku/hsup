@@ -5,6 +5,7 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"math/rand"
@@ -16,6 +17,12 @@ import (
 
 var (
 	ErrNoFreeUID = errors.New("no free UID available")
+
+	// 172.16/12
+	privateSubnet = net.IPNet{
+		IP:   net.IPv4(172, 16, 0, 0).To4(),
+		Mask: net.CIDRMask(12, 32),
+	}
 
 	// 172.16.0.28/30
 	basePrivateIP = net.IPNet{
@@ -112,12 +119,19 @@ func (a *Allocator) privateNetForUID(uid int) (*net.IPNet, error) {
 	asInt += shift
 	asInt <<= 2
 
-	var ip bytes.Buffer
-	if err := binary.Write(&ip, binary.BigEndian, &asInt); err != nil {
+	var buf bytes.Buffer
+	if err := binary.Write(&buf, binary.BigEndian, &asInt); err != nil {
 		return nil, err
 	}
+	ip := net.IP(buf.Bytes())
+	if !privateSubnet.Contains(ip) {
+		return nil, fmt.Errorf(
+			"the assigned IP %q falls out of the allowed subnet %q",
+			ip, privateSubnet,
+		)
+	}
 	return &net.IPNet{
-		IP:   net.IP(ip.Bytes()),
+		IP:   ip,
 		Mask: basePrivateIP.Mask,
 	}, nil
 }
