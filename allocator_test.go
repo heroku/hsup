@@ -48,6 +48,7 @@ func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
 	}
 
 	minUID := 3000
+	maxUID := minUID + 262144
 
 	one, err := allocator.privateNetForUID(minUID + 1)
 	if err != nil {
@@ -75,6 +76,11 @@ func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
 		IP:   net.IPv4(172, 16, 31, 236).To4(),
 		Mask: net.CIDRMask(30, 32),
 	})
+
+	// out of the allowed range
+	if _, err := allocator.privateNetForUID(maxUID + 1); err == nil {
+		t.Fatal("uids outside of the allowed range should cause errors")
+	}
 }
 
 func checkIPNet(t *testing.T, got, expected *net.IPNet) {
