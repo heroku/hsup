@@ -126,7 +126,17 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 
-	// TODO: inject /tmp/slug.tgz if local
+	if ex.Release.Where() == Local {
+		// move into the container
+		if err := copyFile(
+			ex.Release.slugURL,
+			filepath.Join(dataPath, "tmp", "slug.tgz"),
+			0644,
+		); err != nil {
+			return err
+		}
+		ex.Release.slugURL = "/tmp/slug.tgz"
+	}
 
 	outsideContainer, err := filepath.Abs(linuxAmd64Path())
 	if err != nil {
@@ -175,7 +185,9 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			console, dataPath, []string{},
 			initCtx.createCommand, nil, initCtx.startCallback,
 		)
-		log.Println(code, err)
+		if err != nil {
+			log.Printf("namespaces.Exec fails: %q", err)
+		}
 
 		// GC
 		// TODO: gc after sending back the exit status
