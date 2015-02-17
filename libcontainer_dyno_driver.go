@@ -21,6 +21,7 @@ import (
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/mount"
 	"github.com/docker/libcontainer/namespaces"
+	"github.com/docker/libcontainer/network"
 )
 
 type LibContainerDynoDriver struct {
@@ -28,6 +29,10 @@ type LibContainerDynoDriver struct {
 	stacksDir     string
 	containersDir string
 	allocator     *Allocator
+}
+
+func init() {
+	network.AddStrategy("routed", &Routed{})
 }
 
 func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) {
