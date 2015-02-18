@@ -112,17 +112,13 @@ func TestFindsAvailableUIDs(t *testing.T) {
 	}
 
 	// uid=2 is the only available
-	uid, gid, err := allocator.ReserveUID()
+	uid, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if uid != 2 {
 		t.Fatalf("uid=2 was the only available and wasn't allocated. "+
 			"Found %d", uid)
-	}
-	if gid != 2 {
-		t.Fatalf("gid=2 was the only available and wasn't allocated. "+
-			"Found %d", gid)
 	}
 	if !checkUIDFile(workDir, 2) {
 		t.Fatal("a uid file to lock uid=2 wasn't created")
@@ -150,7 +146,7 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first, _, err := allocator.ReserveUID()
+	first, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +154,7 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 		t.Fatalf("a uid file to lock uid=%d wasn't created", first)
 	}
 
-	second, _, err := allocator.ReserveUID()
+	second, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +166,7 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 			" Failed %d != %d", first, second)
 	}
 
-	third, _, err := allocator.ReserveUID()
+	third, err := allocator.ReserveUID()
 	if err != nil {
 		t.Fatal(err)
 	}
