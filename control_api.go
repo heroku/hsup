@@ -3,13 +3,14 @@ package hsup
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
-	"net")
+)
 
-type ProcessStatus struct{
-	Status string
+type ProcessStatus struct {
+	Status    string
 	IPAddress string
-	Port int
+	Port      int
 }
 
 type StatusResponse struct {
@@ -56,8 +57,8 @@ func (c *ControlAPI) ServeGET(w http.ResponseWriter, r *http.Request) {
 		for _, e := range c.processes.Executors {
 			resp.Processes[e.ProcessType] = ProcessStatus{
 				IPAddress: e.IPAddress,
-				Port: e.Port,
-				Status: e.State.String(),
+				Port:      e.Port,
+				Status:    e.State.String(),
 			}
 		}
 		enc := json.NewEncoder(w)
@@ -96,7 +97,7 @@ func (c *ControlAPI) ServePOST(w http.ResponseWriter, r *http.Request) {
 
 func StartControlAPI(socket string, processes <-chan *Processes) <-chan *Processes {
 	api := &ControlAPI{}
-    listener, err := net.Listen("unix", socket)
+	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		panic(err)
 	}
