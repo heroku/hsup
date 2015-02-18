@@ -2,13 +2,18 @@ package hsup
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
-)
+	"net")
+
+type ProcessStatus struct{
+	Status string
+	IPAddress string
+	Port int
+}
 
 type StatusResponse struct {
-	Processes map[string]string
+	Processes map[string]ProcessStatus
 }
 
 type StopRequest struct {
@@ -47,9 +52,13 @@ func (c *ControlAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (c *ControlAPI) ServeGET(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/status":
-		resp := StatusResponse{make(map[string]string)}
+		resp := StatusResponse{make(map[string]ProcessStatus)}
 		for _, e := range c.processes.Executors {
-			resp.Processes[e.ProcessType] = e.State.String()
+			resp.Processes[e.ProcessType] = ProcessStatus{
+				IPAddress: e.IPAddress,
+				Port: e.Port,
+				Status: e.State.String(),
+			}
 		}
 		enc := json.NewEncoder(w)
 		w.Header().Set("Content-Type", "application/json")
@@ -85,8 +94,12 @@ func (c *ControlAPI) ServePOST(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func StartControlAPI(port int, processes <-chan *Processes) <-chan *Processes {
+func StartControlAPI(socket string, processes <-chan *Processes) <-chan *Processes {
 	api := &ControlAPI{}
-	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), api)
+    listener, err := net.Listen("unix", socket)
+	if err != nil {
+		panic(err)
+	}
+	go http.Serve(listener, api)
 	return api.Tee(processes)
 }
