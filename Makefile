@@ -42,10 +42,10 @@ hsup:
 
 hsup-linux-amd64: hsup docker-images
 	mkdir -p -m 0755 $(gopkg)
-	docker run -it --rm -v $$GOPATH/$(gosrc):/go/$(gosrc) -v $(gopkg):/go/$(gosrc)/Godeps/_workspace/pkg golang:1.4 \
+	docker run -it --rm -v $$GOPATH/$(gosrc):/go/$(gosrc) -v $(gopkg):/go/$(gosrc)/Godeps/_workspace/pkg golang:1.4.1 \
 	    /go/$(gosrc)/build/in_docker.sh
 	rm -rf $(tempdir)
-	mv $$GOPATH/$(gosrc)/hsup-linux-amd64 $$GOPATH/bin/
+	install $$GOPATH/$(gosrc)/hsup-linux-amd64 $$GOPATH/bin/
 
 deb: all
 	mkdir -p -m 0755 $(controldir)
@@ -59,5 +59,5 @@ deb: all
 
 # Assumes docker (or boot2docker on OSX) is installed, working and running
 docker-images:
-	docker pull golang:1.4
+	docker pull golang:1.4.1
 
