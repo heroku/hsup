@@ -26,7 +26,6 @@ func (dd *DockerDynoDriver) Build(release *Release) error {
 		return err
 	}
 
-	// TODO: map release.stack -> docker image name
 	stack := "heroku/cedar:14"
 	si, err := dd.d.StackStat(stack)
 	if err != nil {
