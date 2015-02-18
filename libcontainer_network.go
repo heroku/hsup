@@ -31,7 +31,6 @@ type Routed struct {
 func (r *Routed) Create(
 	config *network.Network, nspid int, state *network.NetworkState,
 ) error {
-	// TODO: ensure that config.Gateway and config.Address are in the same subnet
 	if config.VethPrefix == "" {
 		return fmt.Errorf("veth prefix is not specified")
 	}

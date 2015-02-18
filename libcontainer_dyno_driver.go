@@ -242,7 +242,6 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 	if _, err := contents.ReadFrom(original); err != nil {
 		return err
 	}
-	// TODO: allocate a free uid. It is currently hardcoded to 1000
 	dynoUser := fmt.Sprintf("\ndyno:x:%d:%d::/app:/bin/bash\n", uid, uid)
 	if _, err := contents.WriteString(dynoUser); err != nil {
 		return err
@@ -439,7 +438,6 @@ func containerConfig(
 				Mtu:     1500,
 				Type:    "loopback",
 			},
-			// TODO: setup our own network instead of using the docker bridge
 			{
 				Address:    subnet.Host().String(),
 				VethPrefix: fmt.Sprintf("veth%d", uid),
