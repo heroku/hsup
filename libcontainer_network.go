@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"strconv"
 
 	"github.com/docker/docker/pkg/iptables"
 	"github.com/docker/libcontainer/network"
@@ -183,4 +184,119 @@ func (sn *smallSubnet) Host() *net.IPNet {
 // Broadcast address and mask of the subnet
 func (sn *smallSubnet) Broadcast() *net.IPNet {
 	return sn.broadcast
+}
+
+// portMapper manages iptables rules. Each container must use a different
+// chainId.
+type portMapper struct {
+	chainId int
+	port    int
+	subnet  *smallSubnet
+}
+
+// Create adds port mapping rules using iptables.
+func (m *portMapper) Create() error {
+	chain := fmt.Sprintf("dnat-%d", m.chainId)
+	if out, err := iptables.Raw("-t", "nat", "-N", chain); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  chain,
+			Output: out,
+		}
+	}
+
+	// abspath driver currently hardcodes $PORT to 5000 inside containers
+	// forward host:$port -> container:5000
+	if out, err := iptables.Raw(
+		"-t", "nat", "-A", chain, "-p", "tcp",
+		"--dport", strconv.Itoa(m.port), "-j", "DNAT",
+		"--to-destination", fmt.Sprintf("%s:5000", m.subnet.Host().IP),
+	); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  chain,
+			Output: out,
+		}
+	}
+
+	// links from PREROUTING (remote) and OUTPUT (local connections)
+	if out, err := iptables.Raw(
+		"-t", "nat", "-A", "PREROUTING",
+		"-m", "addrtype", "--dst-type", "LOCAL",
+		"-j", chain,
+	); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  "PREROUTING",
+			Output: out,
+		}
+	}
+	if out, err := iptables.Raw(
+		"-t", "nat", "-A", "OUTPUT",
+		"-m", "addrtype", "--dst-type", "LOCAL",
+		"!", "--dst", "127.0.0.0/8",
+		"-j", chain,
+	); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  "OUTPUT",
+			Output: out,
+		}
+	}
+
+	return nil
+}
+
+// Destroy cleans up rules previously created by Create.
+func (m *portMapper) Destroy() error {
+	chain := fmt.Sprintf("dnat-%d", m.chainId)
+	if out, err := iptables.Raw(
+		"-t", "nat", "-D", "OUTPUT",
+		"-m", "addrtype", "--dst-type", "LOCAL",
+		"!", "--dst", "127.0.0.0/8",
+		"-j", chain,
+	); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  "PREROUTING",
+			Output: out,
+		}
+	}
+
+	if out, err := iptables.Raw(
+		"-t", "nat", "-D", "PREROUTING",
+		"-m", "addrtype", "--dst-type", "LOCAL",
+		"-j", chain,
+	); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  "PREROUTING",
+			Output: out,
+		}
+	}
+
+	if out, err := iptables.Raw("-t", "nat", "-F", chain); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  chain,
+			Output: out,
+		}
+	}
+	if out, err := iptables.Raw("-t", "nat", "-X", chain); err != nil {
+		return err
+	} else if len(out) > 0 {
+		return &iptables.ChainError{
+			Chain:  chain,
+			Output: out,
+		}
+	}
+
+	return nil
 }
