@@ -62,7 +62,7 @@ type Executor struct {
 	State    DynoState
 	NewInput chan DynoInput
 
-	//status api fields
+	// Status API fields
 	IPAddress string
 	Port      int
 }
