@@ -61,6 +61,10 @@ type Executor struct {
 	OneShot  bool
 	State    DynoState
 	NewInput chan DynoInput
+
+	//status api fields
+	IPAddress string
+	Port      int
 }
 
 func (e *Executor) dlog(values ...interface{}) {

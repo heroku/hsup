@@ -50,9 +50,9 @@ type Startup struct {
 	// Formation name for "Start" action.
 	FormName string
 
-	// ControlPort specifies the TCP port the hsup API listens on.
-	// Set to nil when API support is disabled.
-	ControlPort *int
+	// ControlSocket specifies the unix socket the hsup API listens on.
+	// Set to "" when API support is disabled.
+	ControlSocket string
 
 	// For use with "run".
 	Args []string
