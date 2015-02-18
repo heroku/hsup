@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/heroku/hsup",
-	"GoVersion": "go1.4",
+	"GoVersion": "go1.4.1",
 	"Packages": [
 		"./..."
 	],
@@ -41,6 +41,11 @@
 		},
 		{
 			"ImportPath": "github.com/docker/docker/pkg/ioutils",
+			"Comment": "v1.4.1-465-gf67c6d3",
+			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/iptables",
 			"Comment": "v1.4.1-465-gf67c6d3",
 			"Rev": "f67c6d313b971a068262a09840f7afdf4d34b292"
 		},
