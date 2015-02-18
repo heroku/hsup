@@ -16,14 +16,11 @@ import (
 )
 
 var (
-	ErrNoFreeUID = errors.New("no free UID available")
-
 	// 172.16/12
 	privateSubnet = net.IPNet{
 		IP:   net.IPv4(172, 16, 0, 0).To4(),
 		Mask: net.CIDRMask(12, 32),
 	}
-
 	// 172.16.0.28/30
 	basePrivateIP = net.IPNet{
 		IP:   net.IPv4(172, 16, 0, 28).To4(),
@@ -33,12 +30,16 @@ var (
 
 // Allocator is responsible for allocating globally unique (per host) resources.
 type Allocator struct {
-	uidsDir string
+	uidsDir  string
+	portsDir string
 
 	// (maxUID-minUID) should always be smaller than 2 ** 18
 	// see privateNetForUID for details
 	minUID int
 	maxUID int
+
+	minPort int
+	maxPort int
 
 	rng *rand.Rand
 }
@@ -48,6 +49,10 @@ func NewAllocator(workDir string) (*Allocator, error) {
 	if err := os.MkdirAll(uids, 0755); err != nil {
 		return nil, err
 	}
+	ports := filepath.Join(workDir, "ports")
+	if err := os.MkdirAll(ports, 0755); err != nil {
+		return nil, err
+	}
 	// use a seed with some entropy from crypt/rand to initialize a cheaper
 	// math/rand rng
 	seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
@@ -55,46 +60,74 @@ func NewAllocator(workDir string) (*Allocator, error) {
 		return nil, err
 	}
 	return &Allocator{
-		uidsDir: uids,
-		// TODO: configurable range
+		uidsDir:  uids,
+		portsDir: ports,
+		// TODO: configurable ranges
 		minUID: 3000,
 		maxUID: 60000,
-		rng:    rand.New(rand.NewSource(seed.Int64())),
+		// outside of the usual range used as ephemeral ports (32768-61000)
+		minPort: 3000,
+		maxPort: 9999,
+		rng:     rand.New(rand.NewSource(seed.Int64())),
 	}, nil
 }
 
-// ReserveUID optimistically locks uid and gid pairs until one is successfully
+// ReserveUID optimistically locks uid numbers until one is successfully
 // allocated. It relies on atomic filesystem operations to guarantee that
-// multiple concurrent tasks will never allocate the same uid/gid pair.
-func (a *Allocator) ReserveUID() (int, int, error) {
+// multiple concurrent tasks will never allocate the same uid.
+//
+// uid numbers allocated by this should be returned to the pool with FreeUID
+// when they are not required anymore.
+func (a *Allocator) ReserveUID() (int, error) {
+	return a.allocate(a.uidsDir, a.minUID, a.maxUID)
+}
+
+// ReservePort optimistically locks port numbers until one is successfully
+// allocated. It relies on atomic filesystem operations to guarantee that
+// multiple concurrent tasks will never allocate the same port.
+//
+// Ports allocated by this should be returned to the pool with FreePort when
+// they are not required anymore.
+func (a *Allocator) ReservePort() (int, error) {
+	return a.allocate(a.portsDir, a.minPort, a.maxPort)
+}
+
+// allocate relies on atomic filesystem operations to guarantee that
+// multiple concurrent tasks will never allocate the same numbers using the same
+// numbersDir.
+func (a *Allocator) allocate(numbersDir string, min, max int) (int, error) {
 	var (
-		interval   = a.maxUID - a.minUID + 1
+		interval   = max - min + 1
 		maxRetries = 5 * interval
 	)
-	// try random uids in the [minUID, maxUID] interval until one works.
+	// Try random uids in the [min, max] interval until one works.
 	// With a good random distribution, a few times the number of possible
-	// uids should be enough attempts to guarantee that all possible uids
-	// will be eventually tried.
+	// numbers should be enough attempts to guarantee that all possible
+	// numbers will be eventually tried.
 	for i := 0; i < maxRetries; i++ {
-		uid := a.rng.Intn(interval) + a.minUID
-		uidFile := filepath.Join(a.uidsDir, strconv.Itoa(uid))
+		n := a.rng.Intn(interval) + a.minUID
+		file := filepath.Join(a.uidsDir, strconv.Itoa(n))
 		// check if free by optimistically locking this uid
-		f, err := os.OpenFile(uidFile, os.O_CREATE|os.O_EXCL, 0600)
+		f, err := os.OpenFile(file, os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
 			continue // already allocated by someone else
 		}
 		if err := f.Close(); err != nil {
-			return 0, 0, err
+			return -1, err
 		}
-		return uid, uid, nil
+		return n, nil
 	}
-	return 0, 0, ErrNoFreeUID
+	return -1, errors.New("no free number available at " + numbersDir)
 }
 
 // FreeUID returns the provided UID to the pool to be used by others
 func (a *Allocator) FreeUID(uid int) error {
-	uidFile := filepath.Join(a.uidsDir, strconv.Itoa(uid))
-	return os.Remove(uidFile)
+	return os.Remove(filepath.Join(a.uidsDir, strconv.Itoa(uid)))
+}
+
+// FreePort returns the provided port number to the pool to be used by others
+func (a *Allocator) FreePort(port int) error {
+	return os.Remove(filepath.Join(a.portsDir, strconv.Itoa(port)))
 }
 
 // privateNetForUID determines which /30 IPv4 network to use for each container,

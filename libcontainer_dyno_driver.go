@@ -77,7 +77,7 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
 	ex.containerUUID = containerUUID
-	uid, gid, err := dd.allocator.ReserveUID()
+	uid, err := dd.allocator.ReserveUID()
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return err
 		}
-		if err := os.Chown(path, uid, gid); err != nil {
+		if err := os.Chown(path, uid, uid); err != nil {
 			return err
 		}
 	}
@@ -126,7 +126,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}
 
 	if err := createPasswdWithDynoUser(
-		stackImagePath, dataPath, uid, gid,
+		stackImagePath, dataPath, uid,
 	); err != nil {
 		return err
 	}
@@ -167,11 +167,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}
 
 	container := containerConfig(
-		containerUUID,
-		uid, gid,
-		dataPath,
-		subnet,
-		ex.Release.ConfigSlice(),
+		containerUUID, uid, dataPath, subnet, ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
@@ -221,7 +217,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	return nil
 }
 
-func createPasswdWithDynoUser(stackImagePath, dataPath string, uid, gid int) error {
+func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 	var contents bytes.Buffer
 	original, err := os.Open(filepath.Join(stackImagePath, "etc", "passwd"))
 	if err != nil {
@@ -233,7 +229,7 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid, gid int) err
 		return err
 	}
 	// TODO: allocate a free uid. It is currently hardcoded to 1000
-	dynoUser := fmt.Sprintf("\ndyno:x:%d:%d::/app:/bin/bash\n", uid, gid)
+	dynoUser := fmt.Sprintf("\ndyno:x:%d:%d::/app:/bin/bash\n", uid, uid)
 	if _, err := contents.WriteString(dynoUser); err != nil {
 		return err
 	}
@@ -343,7 +339,7 @@ func (ctx *containerInit) startCallback() {
 
 func containerConfig(
 	containerUUID string,
-	uid, gid int,
+	uid int,
 	dataPath string,
 	subnet *smallSubnet,
 	env []string,
@@ -393,7 +389,7 @@ func containerConfig(
 		},
 		RootFs:   filepath.Join(dataPath, "root"),
 		Hostname: containerUUID,
-		User:     fmt.Sprintf("%d:%d", uid, gid),
+		User:     fmt.Sprintf("%d:%d", uid, uid),
 		Env:      env,
 		Namespaces: []libcontainer.Namespace{
 			{Type: "NEWIPC"},
