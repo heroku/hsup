@@ -75,6 +75,10 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
+	port, err := dd.allocator.ReservePort()
+	if err != nil {
+		return err
+	}
 	uid, err := dd.allocator.ReserveUID()
 	if err != nil {
 		return err
@@ -156,8 +160,14 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	ex.initExitStatus = make(chan *ExitStatus)
 
 	cfgReader, cfgWriter, err := os.Pipe()
+	portMapper := &portMapper{
+		chainId: uid,
+		port:    port,
+		subnet:  subnet,
+	}
 	initCtx := &containerInit{
 		hsupBinaryPath: outsideContainer,
+		portMapper:     portMapper,
 		ex:             ex,
 		configPipe:     cfgReader,
 	}
@@ -201,10 +211,14 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := os.RemoveAll(dataPath); err != nil {
 			log.Printf("remove all error: %#+v", err)
 		}
+		if err := portMapper.Destroy(); err != nil {
+			log.Printf("error cleaning up iptables rules: %q", err)
+		}
 
 		// it's probably safe to ignore errors here. Worst case
-		// scenario, this uid won't be be reused.
+		// scenario, this uid/port won't be be reused.
 		dd.allocator.FreeUID(uid)
+		dd.allocator.FreePort(port)
 
 		ex.initExitStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.initExitStatus)
@@ -261,6 +275,7 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 
 type containerInit struct {
 	hsupBinaryPath string
+	portMapper     *portMapper
 	ex             *Executor
 	configPipe     *os.File
 }
@@ -305,6 +320,9 @@ func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
 
 func (ctx *containerInit) startCallback() {
 	//TODO: log("Starting process web.1 with command `...`")
+	if err := ctx.portMapper.Create(); err != nil {
+		log.Fatal(err)
+	}
 
 	//child process is already running, it's safe to close the parent's read
 	//side of the pipe
