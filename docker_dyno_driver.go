@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
+	"strconv"
 )
 
 type DockerDynoDriver struct {
@@ -103,6 +104,10 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 		Follow:       true,
 		OutputStream: os.Stdout,
 	})
+
+	exposed := ex.container.NetworkSettings.Ports[docker.Port("5000/tcp")]
+	ex.IPAddress = exposed[0].HostIP
+	ex.Port, _ = strconv.Atoi(exposed[0].HostPort)
 
 	return nil
 }
