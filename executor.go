@@ -58,76 +58,80 @@ type Executor struct {
 	OneShot  bool
 	State    DynoState
 	NewInput chan DynoInput
+
+	// Status API fields
+	IPAddress string
+	Port      int
 }
 
-func (e *Executor) dlog(values ...interface{}) {
+func (ex *Executor) dlog(values ...interface{}) {
 	diag.Log(append(
-		[]interface{}{"Executor", e.Name(), fmt.Sprintf("%p", e)},
+		[]interface{}{"Executor", ex.Name(), fmt.Sprintf("%p", ex)},
 		values...)...)
 }
 
-func (e *Executor) Trigger(input DynoInput) {
-	e.dlog("trigger", input)
+func (ex *Executor) Trigger(input DynoInput) {
+	ex.dlog("trigger", input)
 	select {
-	case e.NewInput <- input:
-	case <-e.Complete:
+	case ex.NewInput <- input:
+	case <-ex.Complete:
 	}
 }
 
-func (e *Executor) wait() {
-	if s := e.DynoDriver.Wait(e); e.Status != nil {
-		log.Println("Executor exits:", e.Name(), "exit code:", s.Code)
-		e.Status <- s
+func (ex *Executor) wait() {
+	if s := ex.DynoDriver.Wait(ex); ex.Status != nil {
+		log.Println("Executor exits:", ex.Name(), "exit code:", s.Code)
+		ex.Status <- s
 	}
-	e.Trigger(Exited)
+	ex.Trigger(Exited)
 }
 
-func (e *Executor) Tick() (err error) {
-	e.dlog("waiting for tick... (current state:", e.State.String()+")")
-	input := <-e.NewInput
-	e.dlog("ticking with input", e.State)
+func (ex *Executor) Tick() (err error) {
+	ex.dlog("waiting for tick... (current state:", ex.State.String()+")")
+	input := <-ex.NewInput
+	ex.dlog("ticking with input", ex.State)
 
 	start := func() error {
-		log.Printf("%v: starting\n", e.Name())
-		if err = e.DynoDriver.Start(e); err != nil {
-			log.Printf("%v: start fails: %q", e.Name(), err.Error())
-			if e.OneShot {
-				go e.Trigger(Retire)
+		log.Printf("%v: starting\n", ex.Name())
+		if err = ex.DynoDriver.Start(ex); err != nil {
+			log.Printf("%v: start fails: %q", ex.Name(), err.Error())
+			if ex.OneShot {
+				go ex.Trigger(Retire)
 			} else {
-				go e.Trigger(Restart)
+				go ex.Trigger(Restart)
 			}
 			return err
 		}
 
-		e.dlog("started")
-		e.State = Started
-		go e.wait()
+		ex.dlog("started")
+		ex.State = Started
+		go ex.wait()
 		return nil
 	}
 
 again:
-	switch e.State {
+	switch ex.State {
 	case Retired:
-		close(e.Complete)
+		close(ex.Complete)
 		return ErrExecutorComplete
 	case Retiring:
 		switch input {
 		case Exited:
-			e.State = Retired
+			ex.State = Retired
 			goto again
 		case Retire:
-			return e.DynoDriver.Stop(e)
+			return ex.DynoDriver.Stop(ex)
 		default:
 			return nil
 		}
 	case Stopped:
 		switch input {
 		case Retire:
-			e.State = Retired
+			ex.State = Retired
 			goto again
 		case Exited:
-			if e.OneShot {
-				e.State = Retired
+			if ex.OneShot {
+				ex.State = Retired
 				goto again
 			}
 
@@ -142,23 +146,23 @@ again:
 	case Started:
 		switch input {
 		case Retire:
-			e.State = Retiring
+			ex.State = Retiring
 			goto again
 		case Exited:
-			e.State = Stopped
+			ex.State = Stopped
 			goto again
 		case Restart:
-			return e.DynoDriver.Stop(e)
+			return ex.DynoDriver.Stop(ex)
 		default:
 			panic(fmt.Sprintln("Invalid input", input))
 		}
 	default:
-		panic(fmt.Sprintln("Invalid state", e.State))
+		panic(fmt.Sprintln("Invalid state", ex.State))
 	}
 }
 
-func (e *Executor) Name() string {
-	return e.ProcessType + "." + strconv.Itoa(e.ProcessID)
+func (ex *Executor) Name() string {
+	return ex.ProcessType + "." + strconv.Itoa(ex.ProcessID)
 }
 
 // Convenience function to return an empty LogplexURL string when
@@ -167,19 +171,19 @@ func (e *Executor) Name() string {
 // This is necessitated because of the repeated conversions between
 // url.URL and string when dealing with hsup.Startup serialization
 // constraints.
-func (e *Executor) logplexURLString() string {
-	if e.LogplexURL == nil {
+func (ex *Executor) logplexURLString() string {
+	if ex.LogplexURL == nil {
 		return ""
 	}
 
-	return e.LogplexURL.String()
+	return ex.LogplexURL.String()
 }
 
-func (e *Executor) bindPairs() []string {
-	pairs := make([]string, len(e.Binds))
+func (ex *Executor) bindPairs() []string {
+	pairs := make([]string, len(ex.Binds))
 
 	i := 0
-	for k, v := range e.Binds {
+	for k, v := range ex.Binds {
 		pairs[i] = fmt.Sprintf("%s:%s", k, v)
 		i++
 	}

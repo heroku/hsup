@@ -236,8 +236,8 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 		"the first assigned number to process types, e.g. web.1")
 	dynoDriverName := flag.StringP("dynodriver", "d", "simple",
 		"specify a dyno driver (program that starts a program)")
-	controlPort := flag.IntP("controlport", "p", -1,
-		"start a control service on 127.0.0.1 on this port")
+	controlSocket := flag.StringP("control-socket", "", "",
+		"start a control api service listening on a unix socket at the specified path")
 	logplex := flag.String("logplex-url", "",
 		"a logplex url to send child process output")
 	bind := flag.String("bind", "",
@@ -283,7 +283,7 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 	dst.App.Name = *appName
 	dst.OneShot = *oneShot
 	dst.StartNumber = *startNumber
-	dst.ControlPort = controlPort
+	dst.ControlSocket = *controlSocket
 
 	if *logplex != "" {
 		if CmdLogplexURL, err = url.Parse(*logplex); err != nil {
@@ -357,8 +357,8 @@ func main() {
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	var p *hsup.Processes
 
-	if hs.ControlPort != nil {
-		procs = hsup.StartControlAPI(*hs.ControlPort, procs)
+	if hs.ControlSocket != "" {
+		procs = hsup.StartControlAPI(hs.ControlSocket, procs)
 	}
 
 	for {
