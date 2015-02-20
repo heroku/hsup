@@ -44,7 +44,7 @@ type Executor struct {
 	LogplexURL  *url.URL
 	Binds       map[string]string
 
-	// simple, abspath, and libcontainer dyno driver properties
+	// simple and abspath dyno driver properties
 	cmd     *exec.Cmd
 	waiting chan struct{}
 
@@ -52,10 +52,7 @@ type Executor struct {
 	container *docker.Container
 
 	// libcontainer dyno driver properties
-	lcStatus      chan *ExitStatus
-	waitStartup   chan struct{}
-	waitWait      chan struct{}
-	containerUUID string
+	initExitStatus chan *ExitStatus
 
 	// FSM Fields
 	OneShot  bool

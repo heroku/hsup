@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"code.google.com/p/go-uuid/uuid"
 
@@ -93,7 +92,6 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
-	ex.containerUUID = containerUUID
 	uid, gid, err := dd.findFreeUIDGID()
 	if err != nil {
 		return err
@@ -155,9 +153,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	// TODO tty
 	console := ""
 
-	ex.lcStatus = make(chan *ExitStatus)
-	ex.waitStartup = make(chan struct{})
-	ex.waitWait = make(chan struct{})
+	ex.initExitStatus = make(chan *ExitStatus)
 
 	cfgReader, cfgWriter, err := os.Pipe()
 	initCtx := &containerInit{
@@ -210,11 +206,27 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		// reused.
 		os.Remove(uidFile)
 
-		ex.lcStatus <- &ExitStatus{Code: code, Err: err}
-		close(ex.lcStatus)
+		ex.initExitStatus <- &ExitStatus{Code: code, Err: err}
+		close(ex.initExitStatus)
 	}()
 
 	return nil
+}
+
+func (dd *LibContainerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
+	return <-ex.initExitStatus
+}
+
+func (dd *LibContainerDynoDriver) Stop(ex *Executor) error {
+	if ex.cmd.ProcessState != nil {
+		return nil // already exited
+	}
+
+	// TODO: fix a race conditition when Stop() is called before the
+	// libcontainer driver re-execs itself
+
+	// tell the abspath-driver to stop
+	return ex.cmd.Process.Signal(syscall.SIGTERM)
 }
 
 // findFreeUIDGID optimistically locks uid and gid pairs until one is
@@ -276,44 +288,6 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid, gid int) err
 	return err
 }
 
-func (dd *LibContainerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
-	s = <-ex.lcStatus
-	close(ex.waitWait)
-	go func() {
-		ex.waiting <- struct{}{}
-	}()
-
-	return s
-}
-
-func (dd *LibContainerDynoDriver) Stop(ex *Executor) error {
-	// TODO: just send a Stop() message to the container's init
-
-	<-ex.waitStartup
-	// Some caller already successfully got a return from "Wait",
-	// which means the process exited: nothing to do.
-	if _, ok := <-ex.waitWait; !ok {
-		return nil
-	}
-
-	p := ex.cmd.Process
-	// Begin graceful shutdown via SIGTERM.
-	p.Signal(syscall.SIGTERM)
-
-	for {
-		select {
-		case <-time.After(10 * time.Second):
-			log.Println("sigkill", p)
-			p.Signal(syscall.SIGKILL)
-		case <-ex.waiting:
-			log.Println("waited", p)
-			return nil
-		}
-		log.Println("spin", p)
-		time.Sleep(1)
-	}
-}
-
 type containerInit struct {
 	hsupBinaryPath string
 	ex             *Executor
@@ -360,7 +334,7 @@ func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
 
 func (ctx *containerInit) startCallback() {
 	//TODO: log("Starting process web.1 with command `...`")
-	close(ctx.ex.waitStartup)
+
 	//child process is already running, it's safe to close the parent's read
 	//side of the pipe
 	ctx.configPipe.Close()
