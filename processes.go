@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -21,9 +22,10 @@ type Processes struct {
 	Rel   *Release
 	Forms []Formation
 
-	Dd        DynoDriver
-	OneShot   bool
-	Executors []*Executor
+	Dd         DynoDriver
+	OneShot    bool
+	Executors  []*Executor
+	LogplexURL *url.URL
 }
 
 type Formation interface {

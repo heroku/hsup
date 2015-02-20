@@ -48,6 +48,9 @@ func (dd *SimpleDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 		if eErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := eErr.Sys().(syscall.WaitStatus); ok {
 				s.Code = status.ExitStatus()
+				if status.Signaled() {
+					s.Code = 128 + int(status.Signal())
+				}
 			}
 		} else {
 			// Non ExitErrors are propagated: they are
