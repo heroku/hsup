@@ -396,6 +396,7 @@ func main() {
 			if p != nil {
 				stopParallel(p)
 			}
+			// TODO: capture the exit status from executors
 			os.Exit(1)
 		}
 	}
