@@ -13,7 +13,7 @@ gosrc          := src/github.com/heroku/hsup
 
 # deb build vars
 packagename    := hsup
-version        := 0.0.4
+version        := 0.0.5
 buildpath      := $(shell pwd)/deb
 controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
@@ -51,7 +51,7 @@ deb: all
 	mkdir -p -m 0755 $(controldir)
 	echo "$$DEB_CONTROL" > $(controldir)/control
 	mkdir -p $(installpath)
-	install hsup-linux-amd64 $(installpath)/$(packagename)
+	install $$GOPATH/bin/hsup-linux-amd64 $(installpath)/$(packagename)
 	docker run -it --rm -v $(buildpath):/go/deb golang:1.4 \
 	    sh -c 'dpkg-deb --build deb . && install -m 0666 ./$(packagename)*.deb deb/'
 	cp $(buildpath)/$(packagename)*.deb .

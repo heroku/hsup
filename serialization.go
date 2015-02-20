@@ -139,9 +139,10 @@ func (hs *Startup) Procs() *Processes {
 			stack:   hs.App.Stack,
 			version: hs.App.Version,
 		},
-		Forms:   make([]Formation, len(hs.App.Processes)),
-		Dd:      hs.Driver,
-		OneShot: hs.OneShot,
+		Forms:      make([]Formation, len(hs.App.Processes)),
+		Dd:         hs.Driver,
+		OneShot:    hs.OneShot,
+		LogplexURL: hs.App.MustParseLogplexURL(),
 	}
 
 	for i := range hs.App.Processes {

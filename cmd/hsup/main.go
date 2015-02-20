@@ -16,6 +16,11 @@ import (
 	flag "github.com/ogier/pflag"
 )
 
+// CmdLogplexURL is non-nil when a logplex URL is specified on the
+// command line.  This has priority over the Control Directory variant
+// of the same setting.
+var CmdLogplexURL *url.URL
+
 func statuses(p *hsup.Processes) <-chan []*hsup.ExitStatus {
 	if p == nil || !p.OneShot {
 		return nil
@@ -167,7 +172,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 					State:       hsup.Stopped,
 					OneShot:     p.OneShot,
 					NewInput:    make(chan hsup.DynoInput),
-					LogplexURL:  hs.App.MustParseLogplexURL(),
+					LogplexURL:  logplexDefault(p),
 					Binds:       hs.Binds,
 				}
 
@@ -191,7 +196,7 @@ func start(p *hsup.Processes, hs *hsup.Startup, args []string) (err error) {
 			OneShot:     true,
 			Status:      make(chan *hsup.ExitStatus),
 			NewInput:    make(chan hsup.DynoInput),
-			LogplexURL:  hs.App.MustParseLogplexURL(),
+			LogplexURL:  logplexDefault(p),
 			Binds:       hs.Binds,
 		}
 
@@ -274,25 +279,31 @@ func fromOptions(dst *hsup.Startup) (args []string) {
 		log.Fatalln("could not initiate dyno driver:", err.Error())
 	}
 
-	if *logplex != "" {
-		_, err = url.Parse(*logplex)
-		if err != nil {
-			log.Fatalln("invalid --logplex-url format:", err)
-		}
-		dst.App.LogplexURL = *logplex
-	}
-
 	dst.Driver = dynoDriver
 	dst.App.Name = *appName
 	dst.OneShot = *oneShot
 	dst.StartNumber = *startNumber
 	dst.ControlPort = controlPort
 
+	if *logplex != "" {
+		if CmdLogplexURL, err = url.Parse(*logplex); err != nil {
+			log.Fatalln("invalid --logplex-url format:", err)
+		}
+	}
+
 	if *bind != "" {
 		dst.Binds = bindParse(*bind)
 	}
 
 	return args[1:]
+}
+
+func logplexDefault(p *hsup.Processes) *url.URL {
+	if CmdLogplexURL == nil {
+		return p.LogplexURL
+	}
+
+	return CmdLogplexURL
 }
 
 func main() {
@@ -385,6 +396,7 @@ func main() {
 			if p != nil {
 				stopParallel(p)
 			}
+			// TODO: capture the exit status from executors
 			os.Exit(1)
 		}
 	}
