@@ -4,7 +4,7 @@ SHELL = /bin/sh
 
 .SUFFIXES:
 
-.PHONY: all clean deb docker-images
+.PHONY: all clean deb deb-local docker-images
 
 # go build vars
 tempdir        := $(shell mktemp -d 2>/dev/null || mktemp -d -t 'hsup.go')
