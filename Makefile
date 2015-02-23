@@ -47,6 +47,13 @@ hsup-linux-amd64: hsup docker-images
 	rm -rf $(tempdir)
 	mv $$GOPATH/$(gosrc)/hsup-linux-amd64 $$GOPATH/bin/
 
+deb-local: hsup
+	mkdir -p -m 0755 $(controldir)
+	echo "$$DEB_CONTROL" > $(controldir)/control
+	mkdir -p $(installpath)
+	install hsup $(installpath)/$(packagename)
+	dpkg-deb --build deb . && install -m 0666 ./$(packagename)*.deb deb/
+
 deb: all
 	mkdir -p -m 0755 $(controldir)
 	echo "$$DEB_CONTROL" > $(controldir)/control
@@ -60,4 +67,3 @@ deb: all
 # Assumes docker (or boot2docker on OSX) is installed, working and running
 docker-images:
 	docker pull golang:1.4
-

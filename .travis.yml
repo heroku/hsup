@@ -1,0 +1,11 @@
+sudo: false
+language: go
+go: 1.4.2
+before_install:
+- export PATH=$HOME/gopath/bin:$PATH
+- go get github.com/tools/godep
+script:
+- godep go test ./...
+- make deb-local
+notifications:
+  email: false
