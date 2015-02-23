@@ -9,3 +9,5 @@ script:
 - make deb-local
 notifications:
   email: false
+  slack:
+    secure: hSX7OP24jtOrG4AVeYs0eExY2nFfiUEV/1IXzIcCrk36Kkr+gC0JHt/6Yp/KeFoaiJlsatyH4122aYfGt7VzgONLod517gjWBwoy01WslZ3js7sD2+jm0TZ+sBXMYj1bL+kPXN5Gq7IzsJHFFhcjpJ1VzZ+zYOsFfXQsMfkAm9o=
