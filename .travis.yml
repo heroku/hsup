@@ -7,8 +7,7 @@ before_install:
 script:
 - godep go test ./...
 - make deb-local
-- pip install --user awscli
-- ~/.local/bin/aws s3 cp --acl public-read deb/*.deb s3://heroku-hsup
+- if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then pip install --user awscli && ~/.local/bin/aws s3 cp --acl public-read deb/*.deb s3://heroku-hsup; fi
 notifications:
   email: false
 cache:
