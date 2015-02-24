@@ -48,7 +48,7 @@ hsup-linux-amd64: hsup docker-images
 	docker run -it --rm -v $$GOPATH/$(gosrc):/go/$(gosrc) -v $(gopkg):/go/$(gosrc)/Godeps/_workspace/pkg golang:1.4 \
 	    /go/$(gosrc)/build/in_docker.sh
 	rm -rf $(tempdir)
-	mv $$GOPATH/$(gosrc)/hsup-linux-amd64 $$GOPATH/bin/
+	mv -f $$GOPATH/$(gosrc)/hsup-linux-amd64 $$GOPATH/bin/
 
 deb-local: hsup
 	mkdir -p -m 0755 $(controldir)
