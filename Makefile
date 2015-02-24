@@ -18,6 +18,10 @@ buildpath      := $(shell pwd)/deb
 controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
 
+ifneq ($(TRAVIS_COMMIT), "")
+version := $(version)-$(TRAVIS_BRANCH)~git+$(TRAVIS_COMMIT)
+endif
+
 define DEB_CONTROL
 Package: $(packagename)
 Version: $(version)
@@ -28,7 +32,6 @@ Priority: optional
 Description: Heroku dyno supervisor
 endef
 export DEB_CONTROL
-
 
 all: hsup-linux-amd64
 

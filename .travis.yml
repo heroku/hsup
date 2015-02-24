@@ -7,7 +7,10 @@ before_install:
 script:
 - godep go test ./...
 - make deb-local
+- pip install --user awscli
+- ~/.local/bin/aws s3 cp --acl public-read deb/*.deb s3://heroku-hsup
 notifications:
   email: false
-  slack:
-    secure: hSX7OP24jtOrG4AVeYs0eExY2nFfiUEV/1IXzIcCrk36Kkr+gC0JHt/6Yp/KeFoaiJlsatyH4122aYfGt7VzgONLod517gjWBwoy01WslZ3js7sD2+jm0TZ+sBXMYj1bL+kPXN5Gq7IzsJHFFhcjpJ1VzZ+zYOsFfXQsMfkAm9o=
+cache:
+  directories:
+  - $HOME/.local
