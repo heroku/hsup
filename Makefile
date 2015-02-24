@@ -19,7 +19,7 @@ controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
 
 ifneq ($(TRAVIS_COMMIT), "")
-version := $(version)-$(TRAVIS_BRANCH)~git+$(TRAVIS_COMMIT)
+version := $(version)-$(TRAVIS_BRANCH)~git~$(TRAVIS_COMMIT)
 endif
 
 define DEB_CONTROL
