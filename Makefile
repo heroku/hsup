@@ -18,7 +18,7 @@ buildpath      := $(shell pwd)/deb
 controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
 
-ifneq ($(TRAVIS_COMMIT), "")
+ifdef TRAVIS_COMMIT
 version := $(version)-$(TRAVIS_BRANCH)~git~$(TRAVIS_COMMIT)
 endif
 
@@ -55,7 +55,7 @@ deb-local: hsup
 	echo "$$DEB_CONTROL" > $(controldir)/control
 	mkdir -p $(installpath)
 	install hsup $(installpath)/$(packagename)
-	dpkg-deb --build deb . && install -m 0666 ./$(packagename)*.deb deb/
+	dpkg-deb -z9 -Zxz --build deb . && install -m 0666 ./$(packagename)*.deb deb/
 
 deb: all
 	mkdir -p -m 0755 $(controldir)
