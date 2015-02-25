@@ -7,9 +7,18 @@ before_install:
 script:
 - godep go test ./...
 - make deb-local
-- if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then b="build-$TRAVIS_BRANCH-$TRAVIS_COMMIT.tgz"; pip install --user awscli && cd deb && tar -czf $b *.deb && ~/.local/bin/aws s3 cp --acl public-read $b s3://heroku-hsup; fi
+- if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then b="build-$TRAVIS_BRANCH-$TRAVIS_COMMIT.tgz";
+  pip install --user awscli && cd deb && tar -czf $b *.deb && ~/.local/bin/aws s3
+  cp --acl public-read $b s3://heroku-hsup; fi
 notifications:
   email: false
+  hipchat:
+    rooms:
+      secure: ZDXQ1qgliveVoTzobRcFg393hbnKsHwcnHfY5qV43P5IPbV8IRjrpX28ZHnGMJjTgIFDh3XEuqj7Sm3dmA/k/PoUPOjKnpnck8nkuchWjrD4O6aKZJTV/FhBge+N5huhKCIqzBHLS2FqwQq88Er3iIqnj1ScIoHSJg/E83/8wjg=
+    template:
+    - '%{repository}#%{build_number} (%{branch} - %{commit} : %{author}): %{message}
+      (<a href="%{build_url}">Details</a> | <a href="%{compare_url}">Change view</a>)'
+    format: html
 cache:
   directories:
-  - $HOME/.local
+  - "$HOME/.local"
