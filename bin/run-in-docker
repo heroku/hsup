@@ -1,0 +1,6 @@
+#!/bin/sh
+
+real_control="$(mktemp -d)"
+cp "$HSUP_CONTROL_DIR"/* "$real_control"
+export HSUP_CONTROL_DIR="$real_control"
+exec /app/bin/hsup "$@"

@@ -69,3 +69,12 @@ hsup run '/usr/bin/printenv'
 # Writing new "new" files is how updates can be issued.
 ls "$HSUP_CONTROL_DIR"
 ```
+
+## Running within docker
+
+```sh-session
+$ docker build -t hsup .
+$ mkdir t
+# place `new` in t as described above
+$ docker run --privileged -it -v `pwd`/t:/ctl -e HSUP_CONTROL_DIR=/ctl hsup bin/run-in-docker -d libcontainer --oneshot start
+```
