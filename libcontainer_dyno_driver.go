@@ -73,7 +73,7 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 	return nil
 }
 
-func (dd *LibContainerDynoDriver) networkFor(uid, port int) (*libcontainer.Network, portMapper, error) {
+func (dd *LibContainerDynoDriver) networkFor(uid int) (*libcontainer.Network, error) {
 	// allow backwards compatibility while users stop relying on static IPs
 	// previously being assigned to containers. This will be removed soon.
 	var (
@@ -91,42 +91,34 @@ func (dd *LibContainerDynoDriver) networkFor(uid, port int) (*libcontainer.Netwo
 			Bridge:     bridge,
 			Mtu:        1500,
 			Type:       "veth",
-		}, &noopPortMapper{}, nil
+		}, nil
 	}
 
 	// allocate a dynamic subnet when no static configuration is provided
 	sn, err := dd.allocator.privateNetForUID(uid)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	subnet, err := newSmallSubnet(sn)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	return &libcontainer.Network{
-			Address:    subnet.Host().String(),
-			VethPrefix: fmt.Sprintf("veth%d", uid),
-			Gateway:    subnet.Gateway().IP.String(),
-			Mtu:        1500,
-			Type:       "routed",
-		}, &iptablesPortMapper{
-			chainId: uid,
-			port:    port,
-			subnet:  subnet,
-		}, nil
+		Address:    subnet.Host().String(),
+		VethPrefix: fmt.Sprintf("veth%d", uid),
+		Gateway:    subnet.Gateway().IP.String(),
+		Mtu:        1500,
+		Type:       "routed",
+	}, nil
 }
 
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
-	port, err := dd.allocator.ReservePort()
-	if err != nil {
-		return err
-	}
 	uid, err := dd.allocator.ReserveUID()
 	if err != nil {
 		return err
 	}
-	network, portMapper, err := dd.networkFor(uid, port)
+	network, err := dd.networkFor(uid)
 	if err != nil {
 		return err
 	}
@@ -201,7 +193,6 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	cfgReader, cfgWriter, err := os.Pipe()
 	initCtx := &containerInit{
 		hsupBinaryPath: outsideContainer,
-		portMapper:     portMapper,
 		ex:             ex,
 		configPipe:     cfgReader,
 	}
@@ -245,14 +236,10 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := os.RemoveAll(dataPath); err != nil {
 			log.Printf("remove all error: %#+v", err)
 		}
-		if err := portMapper.Destroy(); err != nil {
-			log.Printf("error cleaning up iptables rules: %q", err)
-		}
 
 		// it's probably safe to ignore errors here. Worst case
-		// scenario, this uid/port won't be be reused.
+		// scenario, this uid won't be be reused.
 		dd.allocator.FreeUID(uid)
-		dd.allocator.FreePort(port)
 
 		ex.initExitStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.initExitStatus)
@@ -308,7 +295,6 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 
 type containerInit struct {
 	hsupBinaryPath string
-	portMapper     portMapper
 	ex             *Executor
 	configPipe     *os.File
 }
@@ -353,9 +339,6 @@ func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
 
 func (ctx *containerInit) startCallback() {
 	//TODO: log("Starting process web.1 with command `...`")
-	if err := ctx.portMapper.Create(); err != nil {
-		log.Fatal(err)
-	}
 
 	//child process is already running, it's safe to close the parent's read
 	//side of the pipe
