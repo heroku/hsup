@@ -73,6 +73,49 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 	return nil
 }
 
+func (dd *LibContainerDynoDriver) networkFor(uid, port int) (*libcontainer.Network, portMapper, error) {
+	// allow backwards compatibility while users stop relying on static IPs
+	// previously being assigned to containers. This will be removed soon.
+	var (
+		staticIP = os.Getenv("LIBCONTAINER_DYNO_IP")
+		staticGW = os.Getenv("LIBCONTAINER_GW_IP")
+		bridge   = os.Getenv("LIBCONTAINER_BRIDGE")
+	)
+	if staticIP != "" && staticGW != "" && bridge != "" {
+		// fall back to libcontainer's own network strategy and let the
+		// container be attached to a bridge
+		return &libcontainer.Network{
+			Address:    staticIP,
+			VethPrefix: "veth",
+			Gateway:    staticGW,
+			Bridge:     bridge,
+			Mtu:        1500,
+			Type:       "veth",
+		}, &noopPortMapper{}, nil
+	}
+
+	// allocate a dynamic subnet when no static configuration is provided
+	sn, err := dd.allocator.privateNetForUID(uid)
+	if err != nil {
+		return nil, nil, err
+	}
+	subnet, err := newSmallSubnet(sn)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &libcontainer.Network{
+			Address:    subnet.Host().String(),
+			VethPrefix: fmt.Sprintf("veth%d", uid),
+			Gateway:    subnet.Gateway().IP.String(),
+			Mtu:        1500,
+			Type:       "routed",
+		}, &iptablesPortMapper{
+			chainId: uid,
+			port:    port,
+			subnet:  subnet,
+		}, nil
+}
+
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
 	port, err := dd.allocator.ReservePort()
@@ -83,11 +126,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err != nil {
 		return err
 	}
-	sn, err := dd.allocator.privateNetForUID(uid)
-	if err != nil {
-		return err
-	}
-	subnet, err := newSmallSubnet(sn)
+	network, portMapper, err := dd.networkFor(uid, port)
 	if err != nil {
 		return err
 	}
@@ -160,11 +199,6 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	ex.initExitStatus = make(chan *ExitStatus)
 
 	cfgReader, cfgWriter, err := os.Pipe()
-	portMapper := &portMapper{
-		chainId: uid,
-		port:    port,
-		subnet:  subnet,
-	}
 	initCtx := &containerInit{
 		hsupBinaryPath: outsideContainer,
 		portMapper:     portMapper,
@@ -173,7 +207,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}
 
 	container := containerConfig(
-		containerUUID, uid, dataPath, subnet, ex.Release.ConfigSlice(),
+		containerUUID, uid, dataPath, network, ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
@@ -274,7 +308,7 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 
 type containerInit struct {
 	hsupBinaryPath string
-	portMapper     *portMapper
+	portMapper     portMapper
 	ex             *Executor
 	configPipe     *os.File
 }
@@ -332,7 +366,7 @@ func containerConfig(
 	containerUUID string,
 	uid int,
 	dataPath string,
-	subnet *smallSubnet,
+	network *libcontainer.Network,
 	env []string,
 ) *libcontainer.Config {
 	return &libcontainer.Config{
@@ -410,13 +444,7 @@ func containerConfig(
 				Mtu:     1500,
 				Type:    "loopback",
 			},
-			{
-				Address:    subnet.Host().String(),
-				VethPrefix: fmt.Sprintf("veth%d", uid),
-				Gateway:    subnet.Gateway().IP.String(),
-				Mtu:        1500,
-				Type:       "routed",
-			},
+			network,
 		},
 		Cgroups: &cgroups.Cgroup{
 			Name:           containerUUID,

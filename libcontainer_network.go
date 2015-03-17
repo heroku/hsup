@@ -185,16 +185,31 @@ func (sn *smallSubnet) Broadcast() *net.IPNet {
 	return sn.broadcast
 }
 
-// portMapper manages iptables rules. Each container must use a different
+type portMapper interface {
+	Create() error
+	Destroy() error
+}
+
+type noopPortMapper struct{}
+
+func (m *noopPortMapper) Create() error {
+	return nil
+}
+
+func (m *noopPortMapper) Destroy() error {
+	return nil
+}
+
+// iptablesPortMapper manages iptables rules. Each container must use a different
 // chainId.
-type portMapper struct {
+type iptablesPortMapper struct {
 	chainId int
 	port    int
 	subnet  *smallSubnet
 }
 
 // Create adds port mapping rules using iptables.
-func (m *portMapper) Create() error {
+func (m *iptablesPortMapper) Create() error {
 	chain := fmt.Sprintf("dnat-%d", m.chainId)
 	if out, err := iptables.Raw("-t", "nat", "-N", chain); err != nil {
 		return err
@@ -251,7 +266,7 @@ func (m *portMapper) Create() error {
 }
 
 // Destroy cleans up rules previously created by Create.
-func (m *portMapper) Destroy() error {
+func (m *iptablesPortMapper) Destroy() error {
 	chain := fmt.Sprintf("dnat-%d", m.chainId)
 	if out, err := iptables.Raw(
 		"-t", "nat", "-D", "OUTPUT",
