@@ -4,18 +4,12 @@ package hsup
 
 import (
 	"bytes"
-	crand "crypto/rand"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"log"
-	"math"
-	"math/big"
-	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -26,24 +20,24 @@ import (
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/mount"
 	"github.com/docker/libcontainer/namespaces"
+	"github.com/docker/libcontainer/network"
 )
 
 type LibContainerDynoDriver struct {
 	workDir       string
 	stacksDir     string
 	containersDir string
-	uidsDir       string
-	minUID        int
-	maxUID        int
+	allocator     *Allocator
+}
 
-	rng *rand.Rand
+func init() {
+	network.AddStrategy("routed", &Routed{})
 }
 
 func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) {
 	var (
 		stacksDir     = filepath.Join(workDir, "stacks")
 		containersDir = filepath.Join(workDir, "containers")
-		uidsDir       = filepath.Join(workDir, "uids")
 	)
 	if err := os.MkdirAll(stacksDir, 0755); err != nil {
 		return nil, err
@@ -51,26 +45,15 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err := os.MkdirAll(containersDir, 0755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(uidsDir, 0755); err != nil {
-		return nil, err
-	}
-
-	// use a seed with some entropy from crypt/rand to initialize a cheaper
-	// math/rand rng
-	seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
+	allocator, err := NewAllocator(workDir)
 	if err != nil {
 		return nil, err
 	}
-	rng := rand.New(rand.NewSource(seed.Int64()))
-
 	return &LibContainerDynoDriver{
 		workDir:       workDir,
 		stacksDir:     stacksDir,
 		containersDir: containersDir,
-		uidsDir:       uidsDir,
-		minUID:        3000,
-		maxUID:        60000,
-		rng:           rng,
+		allocator:     allocator,
 	}, nil
 }
 
@@ -90,13 +73,55 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 	return nil
 }
 
+func (dd *LibContainerDynoDriver) networkFor(uid int) (*libcontainer.Network, error) {
+	// allow backwards compatibility while users stop relying on static IPs
+	// previously being assigned to containers. This will be removed soon.
+	var (
+		staticIP = os.Getenv("LIBCONTAINER_DYNO_IP")
+		staticGW = os.Getenv("LIBCONTAINER_GW_IP")
+		bridge   = os.Getenv("LIBCONTAINER_BRIDGE")
+	)
+	if staticIP != "" && staticGW != "" && bridge != "" {
+		// fall back to libcontainer's own network strategy and let the
+		// container be attached to a bridge
+		return &libcontainer.Network{
+			Address:    staticIP,
+			VethPrefix: "veth",
+			Gateway:    staticGW,
+			Bridge:     bridge,
+			Mtu:        1500,
+			Type:       "veth",
+		}, nil
+	}
+
+	// allocate a dynamic subnet when no static configuration is provided
+	sn, err := dd.allocator.privateNetForUID(uid)
+	if err != nil {
+		return nil, err
+	}
+	subnet, err := newSmallSubnet(sn)
+	if err != nil {
+		return nil, err
+	}
+	return &libcontainer.Network{
+		Address:    subnet.Host().String(),
+		VethPrefix: fmt.Sprintf("veth%d", uid),
+		Gateway:    subnet.Gateway().IP.String(),
+		Mtu:        1500,
+		Type:       "routed",
+	}, nil
+}
+
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	containerUUID := uuid.New()
-	uid, gid, err := dd.findFreeUIDGID()
+	uid, err := dd.allocator.ReserveUID()
 	if err != nil {
 		return err
 	}
-
+	network, err := dd.networkFor(uid)
+	if err != nil {
+		return err
+	}
 	stackImagePath, err := CurrentStackImagePath(
 		dd.stacksDir, ex.Release.stack,
 	)
@@ -116,7 +141,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return err
 		}
-		if err := os.Chown(path, uid, gid); err != nil {
+		if err := os.Chown(path, uid, uid); err != nil {
 			return err
 		}
 	}
@@ -134,12 +159,22 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}
 
 	if err := createPasswdWithDynoUser(
-		stackImagePath, dataPath, uid, gid,
+		stackImagePath, dataPath, uid,
 	); err != nil {
 		return err
 	}
 
-	// TODO: inject /tmp/slug.tgz if local
+	if ex.Release.Where() == Local {
+		// move into the container
+		if err := copyFile(
+			ex.Release.slugURL,
+			filepath.Join(dataPath, "tmp", "slug.tgz"),
+			0644,
+		); err != nil {
+			return err
+		}
+		ex.Release.slugURL = "/tmp/slug.tgz"
+	}
 
 	outsideContainer, err := filepath.Abs(linuxAmd64Path())
 	if err != nil {
@@ -161,8 +196,9 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		ex:             ex,
 		configPipe:     cfgReader,
 	}
+
 	container := containerConfig(
-		containerUUID, uid, gid, dataPath, ex.Release.ConfigSlice(),
+		containerUUID, uid, dataPath, network, ex.Release.ConfigSlice(),
 	)
 
 	// send config to the init process inside the container
@@ -181,7 +217,9 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			console, dataPath, []string{},
 			initCtx.createCommand, nil, initCtx.startCallback,
 		)
-		log.Println(code, err)
+		if err != nil {
+			log.Printf("namespaces.Exec fails: %q", err)
+		}
 
 		// GC
 		// TODO: gc after sending back the exit status
@@ -199,12 +237,9 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			log.Printf("remove all error: %#+v", err)
 		}
 
-		// free the UID
-		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(uid))
-		// it's probably safe to ignore errors here, the file is
-		// probably gone. Worst case scenario, this uid won't be be
-		// reused.
-		os.Remove(uidFile)
+		// it's probably safe to ignore errors here. Worst case
+		// scenario, this uid won't be be reused.
+		dd.allocator.FreeUID(uid)
 
 		ex.initExitStatus <- &ExitStatus{Code: code, Err: err}
 		close(ex.initExitStatus)
@@ -229,36 +264,7 @@ func (dd *LibContainerDynoDriver) Stop(ex *Executor) error {
 	return ex.cmd.Process.Signal(syscall.SIGTERM)
 }
 
-// findFreeUIDGID optimistically locks uid and gid pairs until one is
-// successfully allocated. It relies on atomic filesystem operations to
-// guarantee that multiple concurrent tasks will never allocate the same uid/gid
-// pair.
-func (dd *LibContainerDynoDriver) findFreeUIDGID() (int, int, error) {
-	var (
-		interval   = dd.maxUID - dd.minUID + 1
-		maxRetries = 5 * interval
-	)
-	// try random uids in the [minUID, maxUID] interval until one works.
-	// With a good random distribution, a few times the number of possible
-	// uids should be enough attempts to guarantee that all possible uids
-	// will be eventually tried.
-	for i := 0; i < maxRetries; i++ {
-		uid := dd.rng.Intn(interval) + dd.minUID
-		uidFile := filepath.Join(dd.uidsDir, strconv.Itoa(uid))
-		// check if free by optimistically locking this uid
-		f, err := os.OpenFile(uidFile, os.O_CREATE|os.O_EXCL, 0600)
-		if err != nil {
-			continue // already allocated by someone else
-		}
-		if err := f.Close(); err != nil {
-			return 0, 0, err
-		}
-		return uid, uid, nil
-	}
-	return 0, 0, errors.New("no free UID available")
-}
-
-func createPasswdWithDynoUser(stackImagePath, dataPath string, uid, gid int) error {
+func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 	var contents bytes.Buffer
 	original, err := os.Open(filepath.Join(stackImagePath, "etc", "passwd"))
 	if err != nil {
@@ -269,8 +275,7 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid, gid int) err
 	if _, err := contents.ReadFrom(original); err != nil {
 		return err
 	}
-	// TODO: allocate a free uid. It is currently hardcoded to 1000
-	dynoUser := fmt.Sprintf("\ndyno:x:%d:%d::/app:/bin/bash\n", uid, gid)
+	dynoUser := fmt.Sprintf("\ndyno:x:%d:%d::/app:/bin/bash\n", uid, uid)
 	if _, err := contents.WriteString(dynoUser); err != nil {
 		return err
 	}
@@ -342,8 +347,9 @@ func (ctx *containerInit) startCallback() {
 
 func containerConfig(
 	containerUUID string,
-	uid, gid int,
+	uid int,
 	dataPath string,
+	network *libcontainer.Network,
 	env []string,
 ) *libcontainer.Config {
 	return &libcontainer.Config{
@@ -391,7 +397,7 @@ func containerConfig(
 		},
 		RootFs:   filepath.Join(dataPath, "root"),
 		Hostname: containerUUID,
-		User:     fmt.Sprintf("%d:%d", uid, gid),
+		User:     fmt.Sprintf("%d:%d", uid, uid),
 		Env:      env,
 		Namespaces: []libcontainer.Namespace{
 			{Type: "NEWIPC"},
@@ -421,15 +427,7 @@ func containerConfig(
 				Mtu:     1500,
 				Type:    "loopback",
 			},
-			// TODO: setup our own network instead of using the docker bridge
-			{
-				Address:    "172.17.0.101/16",
-				Bridge:     "docker0",
-				VethPrefix: "veth",
-				Gateway:    "172.17.42.1",
-				Mtu:        1500,
-				Type:       "veth",
-			},
+			network,
 		},
 		Cgroups: &cgroups.Cgroup{
 			Name:           containerUUID,

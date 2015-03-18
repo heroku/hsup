@@ -51,10 +51,20 @@ func Exec(container *libcontainer.Config, stdin io.Reader, stdout, stderr io.Wri
 	}
 	child.Close()
 
+	wait := func() (*os.ProcessState, error) {
+		ps, err := command.Process.Wait()
+		// we should kill all processes in cgroup when init is died if we use
+		// host PID namespace
+		if !container.Namespaces.Contains(libcontainer.NEWPID) {
+			killAllPids(container)
+		}
+		return ps, err
+	}
+
 	terminate := func(terr error) (int, error) {
 		// TODO: log the errors for kill and wait
 		command.Process.Kill()
-		command.Wait()
+		wait()
 		return -1, terr
 	}
 
@@ -94,7 +104,7 @@ func Exec(container *libcontainer.Config, stdin io.Reader, stdout, stderr io.Wri
 		output, err := setupCmd.CombinedOutput()
 		if err != nil || setupCmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus() != 0 {
 			command.Process.Kill()
-			command.Wait()
+			wait()
 			return -1, fmt.Errorf("setup failed: %s %s", err, output)
 		}
 	}
@@ -122,23 +132,23 @@ func Exec(container *libcontainer.Config, stdin io.Reader, stdout, stderr io.Wri
 		startCallback()
 	}
 
-	if err := command.Wait(); err != nil {
+	ps, err := wait()
+	if err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
 			return -1, err
 		}
 	}
-	if !container.Namespaces.Contains(libcontainer.NEWPID) {
-		killAllPids(container)
-	}
+	// waiting for pipe flushing
+	command.Wait()
 
-	waitStatus := command.ProcessState.Sys().(syscall.WaitStatus)
+	waitStatus := ps.Sys().(syscall.WaitStatus)
 	if waitStatus.Signaled() {
 		return EXIT_SIGNAL_OFFSET + int(waitStatus.Signal()), nil
 	}
 	return waitStatus.ExitStatus(), nil
 }
 
-// killAllPids itterates over all of the container's processes
+// killAllPids iterates over all of the container's processes
 // sending a SIGKILL to each process.
 func killAllPids(container *libcontainer.Config) error {
 	var (
@@ -182,7 +192,7 @@ func hostIDFromMapping(containerID int, uMap []libcontainer.IDMap) (int, bool) {
 	return -1, false
 }
 
-// Gets the root uid for the process on host which could be non-zero
+// Gets the root gid for the process on host which could be non-zero
 // when user namespaces are enabled.
 func GetHostRootGid(container *libcontainer.Config) (int, error) {
 	if container.Namespaces.Contains(libcontainer.NEWUSER) {
@@ -196,7 +206,7 @@ func GetHostRootGid(container *libcontainer.Config) (int, error) {
 		return hostRootGid, nil
 	}
 
-	// Return default root uid 0
+	// Return default root gid 0
 	return 0, nil
 }
 
@@ -205,7 +215,7 @@ func GetHostRootGid(container *libcontainer.Config) (int, error) {
 func GetHostRootUid(container *libcontainer.Config) (int, error) {
 	if container.Namespaces.Contains(libcontainer.NEWUSER) {
 		if container.UidMappings == nil {
-			return -1, fmt.Errorf("User namespaces enabled, but no user mappings found.")
+			return -1, fmt.Errorf("User namespaces enabled, but no uid mappings found.")
 		}
 		hostRootUid, found := hostIDFromMapping(0, container.UidMappings)
 		if !found {
@@ -245,7 +255,7 @@ func AddUidGidMappings(sys *syscall.SysProcAttr, container *libcontainer.Config)
 //
 // console: the /dev/console to setup inside the container
 // init: the program executed inside the namespaces
-// root: the path to the container json file and information
+// dataPath: the path to the directory under which the container's state file is stored
 // pipe: sync pipe to synchronize the parent and child processes
 // args: the arguments to pass to the container to run as the user's program
 func DefaultCreateCommand(container *libcontainer.Config, console, dataPath, init string, pipe *os.File, args []string) *exec.Cmd {
@@ -284,11 +294,9 @@ func DefaultCreateCommand(container *libcontainer.Config, console, dataPath, ini
 // DefaultSetupCommand will return an exec.Cmd that joins the init process to set it up.
 //
 // console: the /dev/console to setup inside the container
+// dataPath: the path to the directory under which the container's state file is stored
 // init: the program executed inside the namespaces
-// root: the path to the container json file and information
-// args: the arguments to pass to the container to run as the user's program
 func DefaultSetupCommand(container *libcontainer.Config, console, dataPath, init string) *exec.Cmd {
-	// get our binary name from arg0 so we can always reexec ourself
 	env := []string{
 		"console=" + console,
 		"data_path=" + dataPath,
