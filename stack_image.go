@@ -48,19 +48,7 @@ type HerokuStackImage struct {
 }
 
 func HerokuStacksFromManifest(stacksDir string) ([]HerokuStackImage, error) {
-	// TODO: cache the manifest
-	resp, err := http.Get(HerokuStacksManifestURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(
-			"invalid stacks manifest at %q",
-			HerokuStacksManifestURL,
-		)
-	}
-	manifest, err := ioutil.ReadAll(resp.Body)
+	manifest, err := fetchStacksManifestWithCache(stacksDir)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +60,34 @@ func HerokuStacksFromManifest(stacksDir string) ([]HerokuStackImage, error) {
 		stacks[i].basedir = stacksDir
 	}
 	return stacks, nil
+}
+
+func fetchStacksManifestWithCache(stacksDir string) ([]byte, error) {
+	cached := filepath.Join(stacksDir, "manifest.yml")
+	if _, err := os.Stat(cached); err == nil {
+		return ioutil.ReadFile(cached)
+	}
+	manifest, err := fetchStacksManifest()
+	if err != nil {
+		return nil, err
+	}
+	err = ioutil.WriteFile(cached, manifest, 0644)
+	return manifest, err
+}
+
+func fetchStacksManifest() ([]byte, error) {
+	resp, err := http.Get(HerokuStacksManifestURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf(
+			"invalid stacks manifest at %q",
+			HerokuStacksManifestURL,
+		)
+	}
+	return ioutil.ReadAll(resp.Body)
 }
 
 func CurrentStackImagePath(stacksDir, name string) (string, error) {
