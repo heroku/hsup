@@ -1,0 +1,17 @@
+{
+    "Version": 1,
+    "Env": {
+        "LANG": "en_US.UTF-8",
+        "FOO": "production",
+        "PORT": "12345"
+    },
+    "Slug": "https://s3.amazonaws.com/sclasen-herokuslugs/slug.tgz",
+    "Stack": "cedar-14",
+    "Processes": [
+        {
+            "Args": ["/usr/bin/printenv"],
+            "Quantity": 1,
+            "Type": "worker"
+        }
+    ]
+}

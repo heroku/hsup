@@ -1,28 +1,29 @@
 FROM ubuntu:14.04
 MAINTAINER dogwood@heroku.com
 
-RUN apt-get update && apt-get install -y curl apt-transport-https software-properties-common make git mercurial jq gcc bridge-utils iptables && apt-get clean
-
-RUN useradd -M app -d /app
+RUN apt-get update && \
+    apt-get install -y curl apt-transport-https software-properties-common \
+        make git mercurial jq gcc \
+        bridge-utils iptables && \
+    apt-get clean
 
 COPY ./Godeps/Godeps.json /tmp/
 COPY docker/buildpack_prep.sh /tmp/
 RUN /tmp/buildpack_prep.sh && rm /tmp/buildpack_prep.sh
 
-RUN mkdir -p /etc/container_environment
+RUN mkdir -p /app
 RUN mkdir -p /var/lib/hsup/stacks
 RUN mkdir -p /etc/hsup
-RUN chown app:app /etc/hsup
+COPY docker/example.json /etc/hsup/new
 
-RUN echo > /etc/bash.bashrc
+VOLUME /var/lib/hsup
+VOLUME /etc/hsup
+
 ADD . /app
-RUN chown -R app:app /app
-ADD docker/profile.sh /etc/profile
-
 WORKDIR /app
+RUN /var/lib/buildpack/bin/compile "/app" "/var/cache/buildpack"
 
-COPY docker/dind /sbin/dind
-ENTRYPOINT ["/sbin/dind"]
-CMD ["agent"]
-
-RUN sudo -u app -i docker/build.sh
+COPY docker/hsup-in-docker /sbin/hsup-in-docker
+ENV HSUP_CONTROL_DIR /etc/hsup
+ENTRYPOINT ["/sbin/hsup-in-docker", "/app/bin/hsup", "-d", "libcontainer"]
+CMD ["start", "--oneshot"]
