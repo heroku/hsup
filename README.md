@@ -70,11 +70,33 @@ hsup run '/usr/bin/printenv'
 ls "$HSUP_CONTROL_DIR"
 ```
 
-## Running within docker
+## Running the libcontainer driver within Docker
+
+Containers (hsup/libcontainer) inside containers (docker). Inception!
 
 ```sh-session
 $ docker build -t hsup .
-$ mkdir t
-# place `new` in t as described above
-$ docker run --privileged -it -v `pwd`/t:/ctl -e HSUP_CONTROL_DIR=/ctl hsup bin/run-in-docker -d libcontainer --oneshot start
+$ docker run --privileged -it hsup
+# will run /usr/bin/printenv, see docker/example.json for details
+```
+
+The docker container by default runs `hsup start --oneshot`. For a custom hsup
+command, use:
+
+```sh-session
+$ docker run --privileged -it hsup run bash
+(dyno console) ~ $
+```
+
+Stack images will be downloaded for each new fresh container. It is a good idea
+to share a common stack image directory between all containers to avoid
+downloading them every time:
+
+```sh-session
+$ mkdir /tmp/stacks
+$ docker run --privileged -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
+...
+$ docker run --privileged -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
+(stack images will be cached)
+...
 ```
