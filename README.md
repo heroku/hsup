@@ -100,3 +100,11 @@ $ docker run --privileged -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
 (stack images will be cached)
 ...
 ```
+
+A custom hsup control dir can be injected as a docker volume, in case custom
+json control files are required:
+
+```sh-session
+$ docker run --privileged -v /tmp/supctl:/etc/hsup -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
+(/tmp/supctl/new or /tmp/supctl/loaded will be used as the control file)
+```
