@@ -1,0 +1,29 @@
+{
+	"ImportPath": "github.com/heroku/log-shuttle",
+	"GoVersion": "go1.4.1",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/bmizerany/aws4",
+			"Rev": "5fb2e72396263668edd9a2956052e402cf6c104a"
+		},
+		{
+			"ImportPath": "github.com/heroku/slog",
+			"Rev": "7746152d93404575df4efa59a29adb8c168c464a"
+		},
+		{
+			"ImportPath": "github.com/nu7hatch/gouuid",
+			"Rev": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
+		},
+		{
+			"ImportPath": "github.com/pebbe/util",
+			"Rev": "e0e04dfe647cbd76fc8a1fba55406e60a2e49a11"
+		},
+		{
+			"ImportPath": "github.com/rcrowley/go-metrics",
+			"Rev": "dee209f2455f101a5e4e593dea94872d2c62d85d"
+		}
+	]
+}
