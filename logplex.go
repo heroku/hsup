@@ -17,8 +17,11 @@ type relay struct {
 func newRelay(logplex *url.URL, name string) (*relay, error) {
     cfg := shuttle.NewConfig()
     cfg.LogsURL = logplex.String()
+    cfg.Appname = "app"
+    cfg.Procid = name
+    cfg.ComputeHeader()
 
-	cl := shuttle.NewShuttle(cfg)
+    cl := shuttle.NewShuttle(cfg)
     cl.Launch()
 
 	return &relay{cl: cl, name: name}, nil
