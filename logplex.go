@@ -1,12 +1,12 @@
 package hsup
 
 import (
-
 	"io"
 	"net/url"
 
+	"io/ioutil"
+
 	shuttle "github.com/heroku/log-shuttle"
-    "io/ioutil"
 )
 
 type relay struct {
@@ -15,11 +15,14 @@ type relay struct {
 }
 
 func newRelay(logplex *url.URL, name string) (*relay, error) {
-    cfg := shuttle.NewConfig()
-    cfg.LogsURL = logplex.String()
+	cfg := shuttle.NewConfig()
+	cfg.LogsURL = logplex.String()
+	cfg.Appname = "app"
+	cfg.Procid = name
+	cfg.ComputeHeader()
 
 	cl := shuttle.NewShuttle(cfg)
-    cl.Launch()
+	cl.Launch()
 
 	return &relay{cl: cl, name: name}, nil
 }
