@@ -1,0 +1,26 @@
+language: go
+go:
+- 1.4.2
+script:
+- make test
+before_deploy:
+- make debs
+- export DEB_VERSION=$(git describe --tags --always | sed s/^v//)
+notifications:
+  hipchat:
+    rooms:
+      secure: CR38+crHhfjYvU+4w+5TrZ7Sx2xFUoDGf81gjC0ow+lyIwTyHtvznLxGt5wSBgGPnVbzTf7TFDMrmjFV6g3oXwRYD7nrRQasj1JCc9G04s0xHpIgnMYVszzdXxaSsBByH8GheUafyJTwCXFpSwNidH2CH5n/y/XsWx3hxmgWvyo=
+    template:
+    - '%{repository}#%{build_number} (%{branch} - %{commit} : %{author}): %{message}
+      (<a href="%{build_url}">Details</a> | <a href="%{compare_url}">Change view</a>)'
+    format: html
+deploy:
+  skip_cleanup: true
+  provider: releases
+  api_key:
+    secure: X0L3J3k9YGaIUESz22nkTf92d74LXSSOx3LiX/rLlUjavYLX06qlzRGr0nDrrBvYOM3QgkRQWgeaQUgCoPsBP2sFOya47jDl6cg7mKgw4GUPj5fwi82JeOxKOvoLhcXqttgJAaX74J61idvldjyzRtQiTftqj0HpGJj8uW4qb4I=
+  file: log-shuttle_${DEB_VERSION}_amd64.deb
+  on:
+    all_branches: true
+    tags: true
+    repo: heroku/log-shuttle

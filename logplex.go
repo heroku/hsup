@@ -1,44 +1,34 @@
 package hsup
 
 import (
-	"bufio"
-	"fmt"
 	"io"
-	"net/http"
 	"net/url"
-	"time"
 
-	"github.com/logplex/logplexc"
+	"io/ioutil"
+
+	shuttle "github.com/heroku/log-shuttle"
 )
 
 type relay struct {
-	cl   *logplexc.Client
+	cl   *shuttle.Shuttle
 	name string
 }
 
 func newRelay(logplex *url.URL, name string) (*relay, error) {
-	cfg := logplexc.Config{
-		Logplex:            *logplex,
-		HttpClient:         *http.DefaultClient,
-		RequestSizeTrigger: 100 * 1024,
-		Concurrency:        3,
-		Period:             250 * time.Millisecond,
-	}
+	cfg := shuttle.NewConfig()
+	cfg.LogsURL = logplex.String()
+	cfg.Appname = "app"
+	cfg.Procid = name
+	cfg.ComputeHeader()
 
-	cl, err := logplexc.NewClient(&cfg)
-	if err != nil {
-		return nil, fmt.Errorf("could not set up log channel: %v", err)
-	}
+	cl := shuttle.NewShuttle(cfg)
+	cl.Launch()
 
 	return &relay{cl: cl, name: name}, nil
 }
 
 func (rl *relay) run(in io.Reader) {
-	scanner := bufio.NewScanner(in)
-	for scanner.Scan() {
-		rl.cl.BufferMessage(134, time.Now(), "app", rl.name,
-			[]byte(scanner.Text()))
-	}
+	rl.cl.ReadLogLines(ioutil.NopCloser(in))
 }
 
 func teePipe(dst io.Writer) (io.Reader, io.Writer) {
