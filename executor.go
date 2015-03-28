@@ -45,8 +45,9 @@ type Executor struct {
 	Binds       map[string]string
 
 	// simple and abspath dyno driver properties
-	cmd     *exec.Cmd
-	waiting chan struct{}
+	cmd       *exec.Cmd
+	waiting   chan struct{}
+	logsRelay *relay
 
 	// docker dyno driver properties
 	container *docker.Container

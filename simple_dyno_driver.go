@@ -1,6 +1,7 @@
 package hsup
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"syscall"
@@ -24,6 +25,22 @@ func (dd *SimpleDynoDriver) Start(ex *Executor) error {
 	ex.cmd.Stdin = os.Stdin
 	ex.cmd.Stdout = os.Stdout
 	ex.cmd.Stderr = os.Stderr
+
+	// Tee stdout and stderr to Logplex.
+	if ex.LogplexURL != nil {
+		var rStdout, rStderr io.Reader
+		var err error
+		ex.logsRelay, err = newRelay(ex.LogplexURL, ex.Name())
+		if err != nil {
+			return err
+		}
+
+		rStdout, ex.cmd.Stdout = teePipe(os.Stdout)
+		rStderr, ex.cmd.Stderr = teePipe(os.Stderr)
+
+		go ex.logsRelay.run(rStdout)
+		go ex.logsRelay.run(rStderr)
+	}
 
 	// Fill environment vector from Heroku configuration.
 	for k, v := range ex.Release.config {
@@ -60,6 +77,10 @@ func (dd *SimpleDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 		}
 	}
 
+	if ex.logsRelay != nil {
+		// wait until all buffered logs are delivered
+		ex.logsRelay.stop()
+	}
 	go func() {
 		ex.waiting <- struct{}{}
 	}()

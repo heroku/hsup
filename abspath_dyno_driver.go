@@ -156,7 +156,7 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 	// Tee stdout and stderr to Logplex.
 	if ex.LogplexURL != nil {
 		var rStdout, rStderr io.Reader
-		rl, err := newRelay(ex.LogplexURL, ex.Name())
+		ex.logsRelay, err = newRelay(ex.LogplexURL, ex.Name())
 		if err != nil {
 			return err
 		}
@@ -164,8 +164,8 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 		rStdout, ex.cmd.Stdout = teePipe(os.Stdout)
 		rStderr, ex.cmd.Stderr = teePipe(os.Stderr)
 
-		go rl.run(rStdout)
-		go rl.run(rStderr)
+		go ex.logsRelay.run(rStdout)
+		go ex.logsRelay.run(rStderr)
 	}
 
 	ex.cmd.Dir = "/app"
@@ -211,6 +211,10 @@ func (dd *AbsPathDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 		}
 	}
 
+	if ex.logsRelay != nil {
+		// wait until all buffered logs are delivered
+		ex.logsRelay.stop()
+	}
 	go func() {
 		ex.waiting <- struct{}{}
 	}()

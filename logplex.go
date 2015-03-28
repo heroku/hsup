@@ -31,6 +31,10 @@ func (rl *relay) run(in io.Reader) {
 	rl.cl.ReadLogLines(ioutil.NopCloser(in))
 }
 
+func (rl *relay) stop() {
+	rl.cl.Land()
+}
+
 func teePipe(dst io.Writer) (io.Reader, io.Writer) {
 	r, w := io.Pipe()
 	tr := io.TeeReader(r, dst)
