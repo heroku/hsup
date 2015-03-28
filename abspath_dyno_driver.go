@@ -69,8 +69,8 @@ func (pr *profileRunner) Args(args []string) []string {
 	return append([]string{pr.file.Name()}, args...)
 }
 
-type AbsPathDynoDriver struct{
-    rl *relay
+type AbsPathDynoDriver struct {
+	rl *relay
 }
 
 func (dd *AbsPathDynoDriver) fetch(release *Release) error {
@@ -168,7 +168,7 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 
 		go rl.run(rStdout)
 		go rl.run(rStderr)
-        dd.rl = rl
+		dd.rl = rl
 	}
 
 	ex.cmd.Dir = "/app"
@@ -218,9 +218,9 @@ func (dd *AbsPathDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 		ex.waiting <- struct{}{}
 	}()
 
-    if dd.rl != nil {
-        dd.rl.stop()
-    }
+	if dd.rl != nil {
+		dd.rl.stop()
+	}
 
 	return s
 }

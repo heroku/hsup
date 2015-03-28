@@ -32,7 +32,7 @@ func (rl *relay) run(in io.Reader) {
 }
 
 func (rl *relay) stop() {
-    rl.cl.Land()
+	rl.cl.Land()
 }
 
 func teePipe(dst io.Writer) (io.Reader, io.Writer) {
