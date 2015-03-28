@@ -21,6 +21,10 @@
 			"Rev": "d2f9ffa1d9cf25b25191b221229effac1b6de526"
 		},
 		{
+			"ImportPath": "github.com/bmizerany/aws4",
+			"Rev": "5fb2e72396263668edd9a2956052e402cf6c104a"
+		},
+		{
 			"ImportPath": "github.com/coreos/go-systemd/dbus",
 			"Comment": "v2",
 			"Rev": "f743bc15d6bddd23662280b4ad20f7c874cdd5ad"
@@ -99,17 +103,26 @@
 			"Rev": "25a4b8ca48c64b3d631110fb74a210f56c401e0b"
 		},
 		{
+			"ImportPath": "github.com/heroku/log-shuttle",
+			"Comment": "v0.9.6-122-g30423fd",
+			"Rev": "30423fd3e2c6d95394a28607bf4a39583c311833"
+		},
+		{
 			"ImportPath": "github.com/htcat/htcat",
 			"Comment": "v1.0.0-3-gec8ce96",
 			"Rev": "ec8ce9614a3180edd4669d941cfd3f5e8785fd20"
 		},
 		{
-			"ImportPath": "github.com/logplex/logplexc",
-			"Rev": "657fe1f25a3657806db367ab494322ef9900a48f"
+			"ImportPath": "github.com/nu7hatch/gouuid",
+			"Rev": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
 		},
 		{
 			"ImportPath": "github.com/ogier/pflag",
 			"Rev": "e4f7d00f344b0954fa3791a8527d10ba7334eceb"
+		},
+		{
+			"ImportPath": "github.com/rcrowley/go-metrics",
+			"Rev": "dee209f2455f101a5e4e593dea94872d2c62d85d"
 		},
 		{
 			"ImportPath": "github.com/syndtr/gocapability/capability",
