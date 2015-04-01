@@ -1,11 +1,21 @@
 package ftest
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/heroku/hsup"
 )
+
+func TestMain(m *testing.M) {
+	if binary == "" {
+		fmt.Fprintln(os.Stderr, "no hsup binary specified, skipping functional tests")
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 func TestEnv(t *testing.T) {
 	if driver == "simple" {

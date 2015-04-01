@@ -21,9 +21,6 @@ func init() {
 	flag.StringVar(&binary, "hsup", "", "dyno execution driver")
 	flag.StringVar(&driver, "driver", "simple", "dyno execution driver")
 	flag.Parse()
-	if binary == "" {
-		panic("Missing the hsup binary location (-hsup flag).")
-	}
 }
 
 type output struct {
