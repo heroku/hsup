@@ -4,7 +4,7 @@ SHELL = /bin/sh
 
 .SUFFIXES:
 
-.PHONY: all clean deb deb-local docker-images
+.PHONY: all clean deb deb-local ftest ftest-libcontainer ftest-simple ftest-docker hsup-docker-container docker-images
 
 # go build vars
 tempdir        := $(shell mktemp -d 2>/dev/null || mktemp -d -t 'hsup.go')
@@ -17,6 +17,9 @@ version        := 0.0.8
 buildpath      := $(shell pwd)/deb
 controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
+
+# testing vars
+driver         ?= libcontainer
 
 ifdef TRAVIS_COMMIT
 version := $(version)-$(TRAVIS_BRANCH)~git~$(TRAVIS_COMMIT)
@@ -32,6 +35,7 @@ Priority: optional
 Description: Heroku dyno supervisor
 endef
 export DEB_CONTROL
+
 
 all: hsup-linux-amd64
 
@@ -67,7 +71,30 @@ deb: all
 	cp $(buildpath)/$(packagename)*.deb .
 	rm -rf $(buildpath)
 
+ftest: hsup-docker-container
+	docker run --privileged \
+	    -v /var/run/docker.sock:/run/docker.sock \
+	    -v /var/lib/hsup/stacks:/var/lib/hsup/stacks \
+	    --entrypoint="/sbin/hsup-in-docker" hsup sh -c \
+	    'mkdir -p /var/cache/buildpack/go1.4.1/go/src/github.com/heroku/ && \
+	    ln -s /app /var/cache/buildpack/go1.4.1/go/src/github.com/heroku/hsup && \
+	    env PATH=/var/lib/buildpack/linux-amd64/bin/:/var/cache/buildpack/go1.4.1/go/bin:$$PATH \
+	    GOROOT=/var/cache/buildpack/go1.4.1/go \
+	    godep go test ./ftest -driver $(driver) -hsup /app/bin/hsup'
+
+ftest-libcontainer: driver = libcontainer
+ftest-libcontainer: ftest
+
+ftest-docker: driver = docker
+ftest-docker: ftest
+
+ftest-simple: driver = simple
+ftest-simple: ftest
+
 # Assumes docker (or boot2docker on OSX) is installed, working and running
 docker-images:
 	docker pull golang:1.4.1
+
+hsup-docker-container:
+	docker build -t hsup .
 

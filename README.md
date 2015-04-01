@@ -108,3 +108,39 @@ json control files are required:
 $ docker run --privileged -v /tmp/supctl:/etc/hsup -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
 (/tmp/supctl/new or /tmp/supctl/loaded will be used as the control file)
 ```
+
+## Automated functional tests
+
+To run several functional tests against a `hsup` binary:
+
+```sh-session
+$ godep go test ./ftest -driver docker -hsup <path-to-compiled-hsup-binary>
+```
+
+Different drivers (`libcontainer`, `simple`) can be specified with the `driver`
+flag, but note that the libcontainer driver requires `root` privileges:
+
+```sh-session
+$ sudo -E $(which godep) go test ./ftest -driver libcontainer -hsup <path-to-hsup-binary>
+```
+
+All tests can also be executed inside docker containers (see the
+hsup-inside-docker section above) with:
+
+```sh-session
+$ make ftest
+runs libcontainer driver tests by default
+
+$ make ftest driver=docker
+specify a custom driver
+
+$ make ftest-libcontainer
+libcontainer driver tests...
+
+$ make ftest-docker
+docker driver tests...
+
+$ make ftest-simple
+simple driver tests...
+```
+
