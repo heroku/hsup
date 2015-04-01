@@ -7,8 +7,6 @@ import (
 	"syscall"
 	"time"
 
-	"path/filepath"
-
 	"github.com/fsouza/go-dockerclient"
 )
 
@@ -71,7 +69,6 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	// unique
 	name := fmt.Sprintf("%v.%v", ex.Name(), time.Now().Unix())
 	vols := make(map[string]struct{})
-	vols["/hsup"] = struct{}{}
 	for _, inside := range ex.Binds {
 		vols[inside] = struct{}{}
 	}
@@ -91,13 +88,8 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	}
 	ex.container = container
 
-	where, err := filepath.Abs(linuxAmd64Path())
-	if err != nil {
-		return err
-	}
-
 	err = dd.d.c.StartContainer(ex.container.ID, &docker.HostConfig{
-		Binds:           append([]string{where + ":/hsup"}, ex.bindPairs()...),
+		Binds:           ex.bindPairs(),
 		PublishAllPorts: true,
 	})
 	if err != nil {
