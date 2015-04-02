@@ -72,6 +72,13 @@ ls "$HSUP_CONTROL_DIR"
 
 ## Running the libcontainer driver within Docker
 
+If you are using boot2docker, do the necessary preparation to expand the
+available disk space for hsup data:
+
+```sh-session
+$ make boot2docker-init
+```
+
 Containers (hsup/libcontainer) inside containers (docker). Inception!
 
 ```sh-session
@@ -110,6 +117,12 @@ $ docker run --privileged -v /tmp/supctl:/etc/hsup -v /tmp/stacks:/var/lib/hsup/
 ```
 
 ## Automated functional tests
+
+If you are using boot2docker (check the section above for details):
+
+```sh-session
+$ make boot2docker-init
+```
 
 To run several functional tests against a `hsup` binary:
 

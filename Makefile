@@ -4,7 +4,7 @@ SHELL = /bin/sh
 
 .SUFFIXES:
 
-.PHONY: all clean deb deb-local ftest ftest-libcontainer ftest-simple ftest-docker hsup-docker-container docker-images
+.PHONY: all clean deb deb-local ftest ftest-libcontainer ftest-simple ftest-docker hsup-docker-container docker-images boot2docker-init
 
 # go build vars
 tempdir        := $(shell mktemp -d 2>/dev/null || mktemp -d -t 'hsup.go')
@@ -97,4 +97,9 @@ docker-images:
 
 hsup-docker-container:
 	docker build -t hsup .
+
+boot2docker-init:
+	boot2docker ssh "sudo sh -c \
+	    'mkdir -p /mnt/sda1/var/lib/hsup && \
+	    ln -sf /mnt/sda1/var/lib/hsup /var/lib/hsup'"
 
