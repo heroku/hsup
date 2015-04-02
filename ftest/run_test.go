@@ -31,6 +31,8 @@ func TestEnv(t *testing.T) {
 		Processes: make([]hsup.FormationSerializable, 0),
 	}
 	output, err := run(app, "env")
+	t.Log(output.out.String())
+	t.Log(output.err.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +65,8 @@ func TestSimpleBashExprWithVar(t *testing.T) {
 		Processes: make([]hsup.FormationSerializable, 0),
 	}
 	output, err := run(app, "echo $TESTENTRY")
+	t.Log(output.out.String())
+	t.Log(output.err.String())
 	if err != nil {
 		t.Fatal(err)
 	}
