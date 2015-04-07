@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -20,10 +21,14 @@ type DockerStackImage struct {
 }
 
 type Docker struct {
-	c *docker.Client
+	c            *docker.Client
+	cacheEnabled bool
 }
 
 func (d *Docker) Connect() (err error) {
+	// cache is disabled by default, unless explicitly enabled
+	d.cacheEnabled, _ = strconv.ParseBool(os.Getenv("DOCKER_IMAGE_CACHE"))
+
 	endpoint := os.Getenv("DOCKER_HOST")
 	if endpoint == "" {
 		endpoint = "unix:///var/run/docker.sock"
@@ -68,14 +73,16 @@ func (d *Docker) StackStat(stack string) (*DockerStackImage, error) {
 
 func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 	string, error) {
-	// Exit early if the image is already around.
 	imageName := release.Name()
-	if _, err := d.c.InspectImage(imageName); err == nil {
-		// Successfully reuse the image that has -- probably
-		// -- been built before for the release in question.
-		// This avoids another long slug download, for
-		// instance.
-		return imageName, nil
+	if d.cacheEnabled {
+		// Exit early if the image is already around.
+		if _, err := d.c.InspectImage(imageName); err == nil {
+			// Successfully reuse the image that has -- probably
+			// -- been built before for the release in question.
+			// This avoids another long slug download, for
+			// instance.
+			return imageName, nil
+		}
 	}
 
 	t := time.Now()
