@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -20,10 +21,14 @@ type DockerStackImage struct {
 }
 
 type Docker struct {
-	c *docker.Client
+	c            *docker.Client
+	cacheEnabled bool
 }
 
 func (d *Docker) Connect() (err error) {
+	// cache is disabled by default, unless explicitly enabled
+	d.cacheEnabled, _ = strconv.ParseBool(os.Getenv("DOCKER_IMAGE_CACHE"))
+
 	endpoint := os.Getenv("DOCKER_HOST")
 	if endpoint == "" {
 		endpoint = "unix:///var/run/docker.sock"
@@ -68,14 +73,16 @@ func (d *Docker) StackStat(stack string) (*DockerStackImage, error) {
 
 func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 	string, error) {
-	// Exit early if the image is already around.
 	imageName := release.Name()
-	if _, err := d.c.InspectImage(imageName); err == nil {
-		// Successfully reuse the image that has -- probably
-		// -- been built before for the release in question.
-		// This avoids another long slug download, for
-		// instance.
-		return imageName, nil
+	if d.cacheEnabled {
+		// Exit early if the image is already around.
+		if _, err := d.c.InspectImage(imageName); err == nil {
+			// Successfully reuse the image that has -- probably
+			// -- been built before for the release in question.
+			// This avoids another long slug download, for
+			// instance.
+			return imageName, nil
+		}
 	}
 
 	t := time.Now()
@@ -125,7 +132,7 @@ func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 
 	// Generate Dockerfile and place in archive.
 	genv := "HSUP_CONTROL_GOB=" + hs.ToBase64Gob()
-	args := []string{"setuidgid", "dyno", "env", genv, "/tmp/hsup"}
+	args := []string{"setuidgid", "dyno", "env", genv, "/hsup"}
 	argText, err := json.Marshal(args)
 	if err != nil {
 		panic(fmt.Sprintln("could not marshal argv:", args))
@@ -139,11 +146,10 @@ func (d *Docker) BuildSlugImage(si *DockerStackImage, release *Release) (
 	}
 
 	dockerContents := fmt.Sprintf(`FROM %s
-COPY hsup /tmp/hsup
-RUN groupadd -r dyno && useradd -r -g dyno dyno && mkdir /app && chown dyno:dyno /app && chmod a+x /tmp/hsup
+COPY hsup /hsup
+RUN groupadd -r dyno && useradd -r -g dyno dyno && mkdir /app && chown dyno:dyno /app && chmod a+x /hsup
 %s
 RUN %s
-RUN rm /tmp/hsup
 WORKDIR /app
 `, si.image.ID, localSlugText, argText)
 

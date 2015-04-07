@@ -6,11 +6,17 @@ Supervises processes that are configured in a Heroku-esque way.
 configuration, and execution information.  `hsup` can also watch a
 local directory that injects similar information.
 
-The execution is performed with a chosen "dyno driver".  The default
-dyno driver, `simple`, downloads and refreshes the environment only.
-There is also a `docker` dyno driver that both obtains the environment
-and executable code and runs it interposed on the `heroku/cedar:14`
-image.
+The execution is performed with a chosen "dyno driver":
+
+* The default dyno driver, `simple`, downloads and refreshes the environment
+  only.
+* The `docker` dyno driver both obtains the environment and executable code and
+  runs it interposed on the `heroku/cedar:14` image.
+* The `libcontainer` driver is similar to the Docker driver, but runs containers
+  in foreground, on top of Heroku official (read only) stack images. It needs to
+  be executed as root (e.g.: `sudo`) and only works on Linux machines. See notes
+  about running it in Docker (below) for nested (hsup-in-docker) support and
+  execution on any host with Docker installed (e.g.: boot2docker).
 
 Usage:
 
@@ -72,6 +78,13 @@ ls "$HSUP_CONTROL_DIR"
 
 ## Running the libcontainer driver within Docker
 
+If you are using boot2docker, do the necessary preparation to expand the
+available disk space for hsup data:
+
+```sh-session
+$ make boot2docker-init
+```
+
 Containers (hsup/libcontainer) inside containers (docker). Inception!
 
 ```sh-session
@@ -108,3 +121,45 @@ json control files are required:
 $ docker run --privileged -v /tmp/supctl:/etc/hsup -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
 (/tmp/supctl/new or /tmp/supctl/loaded will be used as the control file)
 ```
+
+## Automated functional tests
+
+If you are using boot2docker (check the section above for details):
+
+```sh-session
+$ make boot2docker-init
+```
+
+To run several functional tests against a `hsup` binary:
+
+```sh-session
+$ godep go test ./ftest -driver docker -hsup <path-to-compiled-hsup-binary>
+```
+
+Different drivers (`libcontainer`, `simple`) can be specified with the `driver`
+flag, but note that the libcontainer driver requires `root` privileges:
+
+```sh-session
+$ sudo -E $(which godep) go test ./ftest -driver libcontainer -hsup <path-to-hsup-binary>
+```
+
+All tests can also be executed inside docker containers (see the
+hsup-inside-docker section above) with:
+
+```sh-session
+$ make ftest
+runs libcontainer driver tests by default
+
+$ make ftest driver=docker
+specify a custom driver
+
+$ make ftest-libcontainer
+libcontainer driver tests...
+
+$ make ftest-docker
+docker driver tests...
+
+$ make ftest-simple
+simple driver tests...
+```
+

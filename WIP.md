@@ -4,6 +4,22 @@
 overwhelming the README for casual reading, is for notes in testing
 and developing new features.
 
+## docker image caching
+
+Docker images can be cached and re-used for each (app, release) tuple. To enable
+caching, use the `DOCKER_IMAGE_CACHE` env var:
+
+```sh-session
+$ export DOCKER_IMAGE_CACHE=1 HSUP_CONTROL_DIR=/tmp/supctl
+$ hsup start -a myapp web=1
+```
+
+This avois slugs being downloaded all the time, but beware that the cache needs
+to be invalidated manually, and an hsup binary will be baked into the cached
+image the first time it's built. If you need to update hsup inside the image,
+invalidade the cache manually by deleting the image in docker directly, or
+running hsup again with the cache disabled.
+
 ## abspath driver
 
 `hsup` is learning to deal with environments set up with absolute
@@ -11,7 +27,7 @@ paths, e.g. chroot environments and containers.
 
 Example:
 
-```
+```sh-session
 # Sets up a minimal "Cedar-14" chroot in 'tmp/root'
 $ ./util/abspath-model
 
@@ -25,21 +41,3 @@ $ godep go build &&
     "HEROKU_ACCESS_TOKEN=$HEROKU_ACCESS_TOKEN" \
     /hsup run printenv -d abspath -a "$HSUP_APP"
 ```
-
-## libcontainer driver
-
-It works (with a few caveats listed below), but requires `root` to be used:
-
-```
-$ godep go install ./... && sudo env HSUP_CONTROL_DIR=/tmp/hspctl \
-  hsup run -d libcontainer '/bin/bash'
-```
-
-Caveats:
-
-* it must be build with `godep`
-* no support for local slugs
-* no privilege dropping, containers still run as root
-* no networking
-* container data is not being garbage collected yet
-* libcontainerDriver.Stop() (probably) doesn't currently work
