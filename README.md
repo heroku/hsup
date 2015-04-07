@@ -6,11 +6,17 @@ Supervises processes that are configured in a Heroku-esque way.
 configuration, and execution information.  `hsup` can also watch a
 local directory that injects similar information.
 
-The execution is performed with a chosen "dyno driver".  The default
-dyno driver, `simple`, downloads and refreshes the environment only.
-There is also a `docker` dyno driver that both obtains the environment
-and executable code and runs it interposed on the `heroku/cedar:14`
-image.
+The execution is performed with a chosen "dyno driver":
+
+* The default dyno driver, `simple`, downloads and refreshes the environment
+  only.
+* The `docker` dyno driver both obtains the environment and executable code and
+  runs it interposed on the `heroku/cedar:14` image.
+* The `libcontainer` driver is similar to the Docker driver, but runs containers
+  in foreground, on top of Heroku official (read only) stack images. It needs to
+  be executed as root (e.g.: `sudo`) and only works on Linux machines. See notes
+  about running it in Docker (below) for nested (hsup-in-docker) support and
+  execution on any host with Docker installed (e.g.: boot2docker).
 
 Usage:
 
