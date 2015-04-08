@@ -17,12 +17,16 @@ import (
 
 var (
 	// 172.16/12
-	privateSubnet = net.IPNet{
-		IP:   net.IPv4(172, 16, 0, 0).To4(),
+	// by default allocate IPs from the RFC1918 (private address space)
+	// this block provides at most 2**18 = 262144 subnets of size /30
+	DefaultPrivateSubnet = net.IPNet{
+		IP:   net.IPv4(172, 16, 0, 28).To4(),
 		Mask: net.CIDRMask(12, 32),
 	}
-	// 172.16.0.28/30
-	basePrivateIP = net.IPNet{
+	// by default skip the first few IPs from RFC1918 to avoid clashes with
+	// IPs used by AWS (eg.: the internal DNS server is 172.16.0.23 on EC2
+	// classic)
+	DefaultBasePrivateIP = net.IPNet{
 		IP:   net.IPv4(172, 16, 0, 28).To4(),
 		Mask: net.CIDRMask(30, 32),
 	}
@@ -30,7 +34,9 @@ var (
 
 // Allocator is responsible for allocating globally unique (per host) resources.
 type Allocator struct {
-	uidsDir string
+	uidsDir       string
+	privateSubnet net.IPNet
+	basePrivateIP net.IPNet
 
 	// (maxUID-minUID) should always be smaller than 2 ** 18
 	// see privateNetForUID for details
@@ -40,7 +46,11 @@ type Allocator struct {
 	rng *rand.Rand
 }
 
-func NewAllocator(workDir string) (*Allocator, error) {
+func NewAllocator(
+	workDir string,
+	privateSubnet net.IPNet,
+	basePrivateIP net.IPNet,
+) (*Allocator, error) {
 	uids := filepath.Join(workDir, "uids")
 	if err := os.MkdirAll(uids, 0755); err != nil {
 		return nil, err
@@ -52,7 +62,9 @@ func NewAllocator(workDir string) (*Allocator, error) {
 		return nil, err
 	}
 	return &Allocator{
-		uidsDir: uids,
+		uidsDir:       uids,
+		privateSubnet: privateSubnet,
+		basePrivateIP: basePrivateIP,
 		// TODO: configurable ranges
 		minUID: 3000,
 		maxUID: 60000,
@@ -115,7 +127,7 @@ func (a *Allocator) FreeUID(uid int) error {
 func (a *Allocator) privateNetForUID(uid int) (*net.IPNet, error) {
 	shift := uint32(uid - a.minUID)
 	var asInt uint32
-	base := bytes.NewReader(basePrivateIP.IP.To4())
+	base := bytes.NewReader(a.basePrivateIP.IP.To4())
 	if err := binary.Read(base, binary.BigEndian, &asInt); err != nil {
 		return nil, err
 	}
@@ -130,14 +142,14 @@ func (a *Allocator) privateNetForUID(uid int) (*net.IPNet, error) {
 		return nil, err
 	}
 	ip := net.IP(buf.Bytes())
-	if !privateSubnet.Contains(ip) {
+	if !a.privateSubnet.Contains(ip) {
 		return nil, fmt.Errorf(
 			"the assigned IP %q falls out of the allowed subnet %q",
-			ip, privateSubnet,
+			ip, a.privateSubnet,
 		)
 	}
 	return &net.IPNet{
 		IP:   ip,
-		Mask: basePrivateIP.Mask,
+		Mask: a.basePrivateIP.Mask,
 	}, nil
 }

@@ -83,9 +83,10 @@ func (r *Routed) enablePacketForwarding() error {
 }
 
 func (r *Routed) natOutboundTraffic() error {
+	// TODO the private network needs to be configurable
 	masquerade := []string{
 		"POSTROUTING", "-t", "nat",
-		"-s", privateSubnet.String(),
+		"-s", DefaultPrivateSubnet.String(),
 		"-j", "MASQUERADE",
 	}
 	if !iptables.Exists(masquerade...) {

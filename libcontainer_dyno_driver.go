@@ -45,7 +45,11 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err := os.MkdirAll(containersDir, 0755); err != nil {
 		return nil, err
 	}
-	allocator, err := NewAllocator(workDir)
+	allocator, err := NewAllocator(
+		workDir,
+		DefaultPrivateSubnet,
+		DefaultBasePrivateIP,
+	)
 	if err != nil {
 		return nil, err
 	}
