@@ -18,25 +18,19 @@ func TestFirstAvailableInDefaultPrivateNet(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(
-		workDir,
-		DefaultPrivateSubnet,
-		DefaultBasePrivateIP,
-	)
+	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
 	if err != nil {
 		t.Fatal(err)
 	}
 	minUID := 3000
-	net, err := allocator.privateNetForUID(minUID)
+	first, err := allocator.privateNetForUID(minUID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := DefaultBasePrivateIP
-	if !bytes.Equal(net.IP, expected.IP) ||
-		!bytes.Equal(net.Mask, expected.Mask) {
-		t.Fatalf("the first available private network is not"+
-			" 172.16.0.28/30. Got %#+v, Want %#+v", net, expected)
-	}
+	checkIPNet(t, first, &net.IPNet{
+		IP:   net.IPv4(172, 16, 0, 28).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
 }
 
 // RFC1918: 172.16/12 private address space is the default
@@ -46,11 +40,7 @@ func TestAllocatesNetworksInRFC1918SpaceByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(
-		workDir,
-		DefaultPrivateSubnet,
-		DefaultBasePrivateIP,
-	)
+	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,11 +93,7 @@ func TestAllocatesNetworksFromConfigurableBlock(t *testing.T) {
 		IP:   net.IPv4(127, 128, 0, 0).To4(),
 		Mask: net.CIDRMask(16, 32),
 	}
-	startAt := net.IPNet{
-		IP:   net.IPv4(127, 128, 0, 0).To4(),
-		Mask: net.CIDRMask(30, 32),
-	}
-	allocator, err := NewAllocator(workDir, block, startAt)
+	allocator, err := NewAllocator(workDir, block)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +104,10 @@ func TestAllocatesNetworksFromConfigurableBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	checkIPNet(t, first, &startAt)
+	checkIPNet(t, first, &net.IPNet{
+		IP:   net.IPv4(127, 128, 0, 0).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
 
 	second, err := allocator.privateNetForUID(minUID + 1)
 	if err != nil {
@@ -148,11 +137,7 @@ func TestFindsAvailableUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(
-		workDir,
-		DefaultPrivateSubnet,
-		DefaultBasePrivateIP,
-	)
+	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,11 +172,7 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(
-		workDir,
-		DefaultPrivateSubnet,
-		DefaultBasePrivateIP,
-	)
+	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
 	if err != nil {
 		t.Fatal(err)
 	}

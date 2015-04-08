@@ -16,19 +16,15 @@ import (
 )
 
 var (
-	// 172.16/12
-	// by default allocate IPs from the RFC1918 (private address space)
-	// this block provides at most 2**18 = 262144 subnets of size /30
+	// 172.16/12 block, starting at 172.16.0.28/30
+	// By default allocate IPs from the RFC1918 (private address space),
+	// which provides at most 2**18 = 262144 subnets of size /30.
+	// Skip the first few IPs from RFC1918 to avoid clashes with
+	// IPs used by AWS (eg.: the internal DNS server is 172.16.0.23 on EC2
+	// classic).
 	DefaultPrivateSubnet = net.IPNet{
 		IP:   net.IPv4(172, 16, 0, 28).To4(),
 		Mask: net.CIDRMask(12, 32),
-	}
-	// by default skip the first few IPs from RFC1918 to avoid clashes with
-	// IPs used by AWS (eg.: the internal DNS server is 172.16.0.23 on EC2
-	// classic)
-	DefaultBasePrivateIP = net.IPNet{
-		IP:   net.IPv4(172, 16, 0, 28).To4(),
-		Mask: net.CIDRMask(30, 32),
 	}
 )
 
@@ -46,11 +42,11 @@ type Allocator struct {
 	rng *rand.Rand
 }
 
-func NewAllocator(
-	workDir string,
-	privateSubnet net.IPNet,
-	basePrivateIP net.IPNet,
-) (*Allocator, error) {
+// NewAllocator receives a CIDR block to allocate dyno subnets from, in the form
+// baseIP/Mask. All subnets will be >= baseIP, e.g.: 172.16.0.28/12 will cause
+// subnets of size /30 to be allocated from 172.16/12, starting at
+// 172.16.0.28/30.
+func NewAllocator(workDir string, privateSubnet net.IPNet) (*Allocator, error) {
 	uids := filepath.Join(workDir, "uids")
 	if err := os.MkdirAll(uids, 0755); err != nil {
 		return nil, err
@@ -61,10 +57,18 @@ func NewAllocator(
 	if err != nil {
 		return nil, err
 	}
+	baseIP := net.IPNet{
+		IP:   privateSubnet.IP.To4(),
+		Mask: net.CIDRMask(30, 32),
+	}
+	subnet := net.IPNet{
+		privateSubnet.IP.Mask(privateSubnet.Mask).To4(),
+		privateSubnet.Mask,
+	}
 	return &Allocator{
 		uidsDir:       uids,
-		privateSubnet: privateSubnet,
-		basePrivateIP: basePrivateIP,
+		privateSubnet: subnet,
+		basePrivateIP: baseIP,
 		// TODO: configurable ranges
 		minUID: 3000,
 		maxUID: 60000,
