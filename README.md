@@ -163,3 +163,18 @@ $ make ftest-simple
 simple driver tests...
 ```
 
+## Driver specific configuration
+
+Some drivers accept custom configuration via ENV.
+
+### Docker
+
+* `DOCKER_HOST`
+* `DOCKER_CERT_PATH`
+* `DOCKER_IMAGE_CACHE`: when set, docker images are only built once per release.
+
+### Libcontainer
+
+* `LIBCONTAINER_DYNO_SUBNET`: a CIDR block to allocate dyno subnets (of size
+  /30) from. It is `172.16.0.0/12` (RFC1918) by default when not set.
+
