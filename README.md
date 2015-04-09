@@ -177,4 +177,10 @@ Some drivers accept custom configuration via ENV.
 
 * `LIBCONTAINER_DYNO_SUBNET`: a CIDR block to allocate dyno subnets (of size
   /30) from. It is `172.16.0.0/12` (RFC1918) by default when not set.
+* `LIBCONTAINER_DYNO_UID_MIN` and `LIBCONTAINER_DYNO_UID_MAX`: Linux UIDs to use
+  for each dyno. It also defines the maximum number of allowed dynos, as each
+  dyno gets a unique UID per box. To avoid reusing subnets (IPs), make sure that
+  `(maxUID - minUID) <= /30 subnets that LIBCONTAINER_DYNO_SUBNET can provide`.
+  `172.17.0.0/16` can provide `2 ** (30-16)` = **16384** subnets of size /30. In
+  this case, to avoid subnets being reused, make sure that `(maxUID - minUID) <= 16384`.
 

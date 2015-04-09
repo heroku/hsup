@@ -80,7 +80,7 @@ ftest: hsup-docker-container
 	    ln -s /app /var/cache/buildpack/go1.4.1/go/src/github.com/heroku/hsup && \
 	    env PATH=/var/lib/buildpack/linux-amd64/bin/:/var/cache/buildpack/go1.4.1/go/bin:$$PATH \
 	    GOROOT=/var/cache/buildpack/go1.4.1/go \
-	    godep go test ./ftest -driver $(driver) -hsup /app/bin/hsup'
+	    godep go test $(GO_TEST_FLAGS) ./ftest -driver $(driver) -hsup /app/bin/hsup'
 
 ftest-libcontainer: driver = libcontainer
 ftest-libcontainer: ftest

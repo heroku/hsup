@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -24,7 +25,12 @@ import (
 	"github.com/docker/libcontainer/network"
 )
 
-var dynoPrivateSubnet net.IPNet
+var (
+	dynoPrivateSubnet net.IPNet
+	// default to max 8K dynos
+	dynoMinUID int = 3000
+	dynoMaxUID int = 11000
+)
 
 type LibContainerDynoDriver struct {
 	workDir       string
@@ -33,6 +39,10 @@ type LibContainerDynoDriver struct {
 	allocator     *Allocator
 }
 
+// init reads custom configuration from ENV vars:
+// - LIBCONTAINER_DYNO_SUBNET
+// - LIBCONTAINER_DYNO_UID_MIN
+// - LIBCONTAINER_DYNO_UID_MAX
 func init() {
 	dynoPrivateSubnet = DefaultPrivateSubnet
 	if custom := strings.TrimSpace(
@@ -48,6 +58,25 @@ func init() {
 		}
 	}
 	network.AddStrategy("routed", &Routed{privateSubnet: dynoPrivateSubnet})
+
+	if minUID := strings.TrimSpace(
+		os.Getenv("LIBCONTAINER_DYNO_UID_MIN"),
+	); len(minUID) > 0 {
+		min, err := strconv.Atoi(minUID)
+		if err != nil {
+			panic(err)
+		}
+		dynoMinUID = min
+	}
+	if maxUID := strings.TrimSpace(
+		os.Getenv("LIBCONTAINER_DYNO_UID_MAX"),
+	); len(maxUID) > 0 {
+		max, err := strconv.Atoi(maxUID)
+		if err != nil {
+			panic(err)
+		}
+		dynoMaxUID = max
+	}
 }
 
 func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) {
@@ -61,7 +90,10 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err := os.MkdirAll(containersDir, 0755); err != nil {
 		return nil, err
 	}
-	allocator, err := NewAllocator(workDir, dynoPrivateSubnet)
+	allocator, err := NewAllocator(
+		workDir, dynoPrivateSubnet,
+		dynoMinUID, dynoMaxUID,
+	)
 	if err != nil {
 		return nil, err
 	}

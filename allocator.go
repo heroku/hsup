@@ -44,10 +44,19 @@ type Allocator struct {
 }
 
 // NewAllocator receives a CIDR block to allocate dyno subnets from, in the form
-// baseIP/Mask. All subnets will be >= baseIP, e.g.: 172.16.0.28/12 will cause
+// baseIP/mask. All subnets will be >= baseIP, e.g.: 172.16.0.28/12 will cause
 // subnets of size /30 to be allocated from 172.16/12, starting at
 // 172.16.0.28/30.
-func NewAllocator(workDir string, privateSubnet net.IPNet) (*Allocator, error) {
+//
+// To avoid reusing the same subnet for two different dynos (UIDs), make sure
+// (maxUID - minUID) <= /30 subnets that the CIDR block can provide. E.g.:
+// 172.17/16 can provide 2 ** (30-16) = 16384 /30 subnets, then to avoid subnets
+// being reused, make sure that (maxUID - minUID) <= 16384.
+func NewAllocator(
+	workDir string,
+	privateSubnet net.IPNet,
+	minUID, maxUID int,
+) (*Allocator, error) {
 	uids := filepath.Join(workDir, "uids")
 	if err := os.MkdirAll(uids, 0755); err != nil {
 		return nil, err
@@ -85,8 +94,8 @@ func NewAllocator(workDir string, privateSubnet net.IPNet) (*Allocator, error) {
 		basePrivateIP:    baseIP,
 		availableSubnets: availableSubnets,
 		// TODO: configurable ranges
-		minUID: 3000,
-		maxUID: 60000,
+		minUID: minUID,
+		maxUID: maxUID,
 		rng:    rand.New(rand.NewSource(seed.Int64())),
 	}, nil
 }

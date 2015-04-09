@@ -18,11 +18,16 @@ func TestFirstAvailableInDefaultPrivateNet(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
+
+	minUID := 3000
+	allocator, err := NewAllocator(
+		workDir, DefaultPrivateSubnet,
+		minUID, minUID+11000,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	minUID := 3000
+
 	first, err := allocator.privateNetForUID(minUID)
 	if err != nil {
 		t.Fatal(err)
@@ -40,15 +45,18 @@ func TestAllocatesNetworksInRFC1918SpaceByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	minUID := 3000
 	// the /12 block provides 2 ** 18 = 262144 /30 subnets, but the first 8
 	// are not being used (skipped) by default
 	maxUID := minUID + 262144 - 1 - 7
+	allocator, err := NewAllocator(
+		workDir, DefaultPrivateSubnet,
+		minUID, maxUID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	one, err := allocator.privateNetForUID(minUID + 1)
 	if err != nil {
@@ -109,13 +117,13 @@ func TestAllocatesNetworksFromConfigurableBlock(t *testing.T) {
 		IP:   net.IPv4(127, 128, 0, 0).To4(),
 		Mask: net.CIDRMask(16, 32),
 	}
-	allocator, err := NewAllocator(workDir, block)
+	minUID := 3000
+	maxUID := minUID + 16384 - 1
+	allocator, err := NewAllocator(workDir, block, minUID, maxUID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	minUID := 3000
-	maxUID := minUID + 16384 - 1
 	first, err := allocator.privateNetForUID(minUID)
 	if err != nil {
 		t.Fatal(err)
@@ -176,12 +184,14 @@ func TestAllowsStaticIP(t *testing.T) {
 		IP:   net.IPv4(127, 128, 0, 0).To4(),
 		Mask: net.CIDRMask(30, 32),
 	}
-	allocator, err := NewAllocator(workDir, block)
+	minUID := 3000
+	maxUID := 60000
+	allocator, err := NewAllocator(workDir, block, minUID, maxUID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for uid := 3000; uid <= 60000; uid++ {
+	for uid := minUID; uid <= maxUID; uid++ {
 		subnet, err := allocator.privateNetForUID(uid)
 		if err != nil {
 			t.Fatal(err)
@@ -206,13 +216,11 @@ func TestFindsAvailableUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
+
+	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet, 1, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocator.minUID = 1
-	allocator.maxUID = 3
-
 	// some uids are already allocated...
 	if err := createUIDFile(workDir, 1); err != nil {
 		t.Fatal(err)
@@ -241,13 +249,14 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet)
+
+	allocator, err := NewAllocator(
+		workDir, DefaultPrivateSubnet,
+		3000, 3004,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocator.minUID = 3000
-	allocator.maxUID = 3004
-
 	// some uids are already allocated...
 	if err := createUIDFile(workDir, 3002); err != nil {
 		t.Fatal(err)
