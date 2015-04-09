@@ -28,7 +28,7 @@ type output struct {
 	err bytes.Buffer
 }
 
-func run(app hsup.AppSerializable, args ...string) (*output, error) {
+func run(app hsup.AppSerializable, hsupEnv []string, args ...string) (*output, error) {
 	controlDir, err := ioutil.TempDir("", "hsup-test-control")
 	if err != nil {
 		return nil, err
@@ -51,10 +51,10 @@ func run(app hsup.AppSerializable, args ...string) (*output, error) {
 		[]string{"-d", driver, "run"},
 		args...,
 	)...)
-	cmd.Env = []string{
-		"PATH=" + os.Getenv("PATH"),
-		"HSUP_CONTROL_DIR=" + controlDir,
-	}
+	cmd.Env = append(hsupEnv,
+		"PATH="+os.Getenv("PATH"),
+		"HSUP_CONTROL_DIR="+controlDir,
+	)
 	var output output
 	cmd.Stdout = &output.out
 	cmd.Stderr = &output.err

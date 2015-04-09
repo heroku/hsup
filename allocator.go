@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
 	"math/rand"
@@ -183,7 +182,6 @@ func subnetsToSkip(baseIP net.IP, subnetSize int) (uint32, error) {
 	if err := binary.Read(b, binary.BigEndian, &baseIPAsInt); err != nil {
 		return 0, err
 	}
-	log.Printf(">>> BASE: %d", baseIPAsInt)
 	// cut the first subnetSize bits
 	toSkip := baseIPAsInt << uint32(subnetSize)
 	toSkip >>= uint32(subnetSize)
