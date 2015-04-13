@@ -7,9 +7,11 @@ import (
 	"encoding/gob"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -23,6 +25,13 @@ import (
 	"github.com/docker/libcontainer/network"
 )
 
+var (
+	dynoPrivateSubnet net.IPNet
+	// default to max 8K dynos
+	dynoMinUID int = 3000
+	dynoMaxUID int = 11000
+)
+
 type LibContainerDynoDriver struct {
 	workDir       string
 	stacksDir     string
@@ -30,8 +39,44 @@ type LibContainerDynoDriver struct {
 	allocator     *Allocator
 }
 
+// init reads custom configuration from ENV vars:
+// - LIBCONTAINER_DYNO_SUBNET
+// - LIBCONTAINER_DYNO_UID_MIN
+// - LIBCONTAINER_DYNO_UID_MAX
 func init() {
-	network.AddStrategy("routed", &Routed{})
+	dynoPrivateSubnet = DefaultPrivateSubnet
+	if custom := strings.TrimSpace(
+		os.Getenv("LIBCONTAINER_DYNO_SUBNET"),
+	); len(custom) > 0 {
+		baseIP, subnet, err := net.ParseCIDR(custom)
+		if err != nil {
+			panic(err)
+		}
+		dynoPrivateSubnet = net.IPNet{
+			IP:   baseIP.To4(),
+			Mask: subnet.Mask,
+		}
+	}
+	network.AddStrategy("routed", &Routed{privateSubnet: dynoPrivateSubnet})
+
+	if minUID := strings.TrimSpace(
+		os.Getenv("LIBCONTAINER_DYNO_UID_MIN"),
+	); len(minUID) > 0 {
+		min, err := strconv.Atoi(minUID)
+		if err != nil {
+			panic(err)
+		}
+		dynoMinUID = min
+	}
+	if maxUID := strings.TrimSpace(
+		os.Getenv("LIBCONTAINER_DYNO_UID_MAX"),
+	); len(maxUID) > 0 {
+		max, err := strconv.Atoi(maxUID)
+		if err != nil {
+			panic(err)
+		}
+		dynoMaxUID = max
+	}
 }
 
 func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) {
@@ -45,7 +90,10 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err := os.MkdirAll(containersDir, 0755); err != nil {
 		return nil, err
 	}
-	allocator, err := NewAllocator(workDir)
+	allocator, err := NewAllocator(
+		workDir, dynoPrivateSubnet,
+		dynoMinUID, dynoMaxUID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -74,27 +122,6 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 }
 
 func (dd *LibContainerDynoDriver) networkFor(uid int) (*libcontainer.Network, error) {
-	// allow backwards compatibility while users stop relying on static IPs
-	// previously being assigned to containers. This will be removed soon.
-	var (
-		staticIP = os.Getenv("LIBCONTAINER_DYNO_IP")
-		staticGW = os.Getenv("LIBCONTAINER_GW_IP")
-		bridge   = os.Getenv("LIBCONTAINER_BRIDGE")
-	)
-	if staticIP != "" && staticGW != "" && bridge != "" {
-		// fall back to libcontainer's own network strategy and let the
-		// container be attached to a bridge
-		return &libcontainer.Network{
-			Address:    staticIP,
-			VethPrefix: "veth",
-			Gateway:    staticGW,
-			Bridge:     bridge,
-			Mtu:        1500,
-			Type:       "veth",
-		}, nil
-	}
-
-	// allocate a dynamic subnet when no static configuration is provided
 	sn, err := dd.allocator.privateNetForUID(uid)
 	if err != nil {
 		return nil, err

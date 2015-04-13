@@ -1,21 +1,9 @@
 package ftest
 
 import (
-	"fmt"
-	"os"
 	"strings"
 	"testing"
-
-	"github.com/heroku/hsup"
 )
-
-func TestMain(m *testing.M) {
-	if binary == "" {
-		fmt.Fprintln(os.Stderr, "no hsup binary specified, skipping functional tests")
-		os.Exit(0)
-	}
-	os.Exit(m.Run())
-}
 
 func TestEnv(t *testing.T) {
 	if driver == "simple" {
@@ -23,16 +11,8 @@ func TestEnv(t *testing.T) {
 		return
 	}
 
-	app := hsup.AppSerializable{
-		Version:   1,
-		Name:      "test-app-123",
-		Slug:      "https://s3.amazonaws.com/sclasen-herokuslugs/slug.tgz",
-		Stack:     "cedar-14",
-		Processes: make([]hsup.FormationSerializable, 0),
-	}
-	output, err := run(app, "env")
-	t.Log(output.out.String())
-	t.Log(output.err.String())
+	output, err := run(AppMinimal, []string{}, "env")
+	debug(t, output)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,19 +34,8 @@ func TestEnv(t *testing.T) {
 }
 
 func TestSimpleBashExprWithVar(t *testing.T) {
-	app := hsup.AppSerializable{
-		Version: 1,
-		Name:    "test-app-123",
-		Env: map[string]string{
-			"TESTENTRY": "vAlId",
-		},
-		Slug:      "https://s3.amazonaws.com/sclasen-herokuslugs/slug.tgz",
-		Stack:     "cedar-14",
-		Processes: make([]hsup.FormationSerializable, 0),
-	}
-	output, err := run(app, "echo $TESTENTRY")
-	t.Log(output.out.String())
-	t.Log(output.err.String())
+	output, err := run(AppWithEnv, []string{}, "echo $TESTENTRY")
+	debug(t, output)
 	if err != nil {
 		t.Fatal(err)
 	}

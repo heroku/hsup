@@ -16,21 +16,24 @@ import (
 )
 
 var (
-	// 172.16/12
-	privateSubnet = net.IPNet{
-		IP:   net.IPv4(172, 16, 0, 0).To4(),
-		Mask: net.CIDRMask(12, 32),
-	}
-	// 172.16.0.28/30
-	basePrivateIP = net.IPNet{
+	// 172.16/12 block, starting at 172.16.0.28/30
+	// By default allocate IPs from the RFC1918 (private address space),
+	// which provides at most 2**18 = 262144 subnets of size /30.
+	// Skip the first few IPs from RFC1918 to avoid clashes with
+	// IPs used by AWS (eg.: the internal DNS server is 172.16.0.23 on EC2
+	// classic).
+	DefaultPrivateSubnet = net.IPNet{
 		IP:   net.IPv4(172, 16, 0, 28).To4(),
-		Mask: net.CIDRMask(30, 32),
+		Mask: net.CIDRMask(12, 32),
 	}
 )
 
 // Allocator is responsible for allocating globally unique (per host) resources.
 type Allocator struct {
-	uidsDir string
+	uidsDir          string
+	privateSubnet    net.IPNet
+	basePrivateIP    net.IPNet
+	availableSubnets uint32
 
 	// (maxUID-minUID) should always be smaller than 2 ** 18
 	// see privateNetForUID for details
@@ -40,7 +43,20 @@ type Allocator struct {
 	rng *rand.Rand
 }
 
-func NewAllocator(workDir string) (*Allocator, error) {
+// NewAllocator receives a CIDR block to allocate dyno subnets from, in the form
+// baseIP/mask. All subnets will be >= baseIP, e.g.: 172.16.0.28/12 will cause
+// subnets of size /30 to be allocated from 172.16/12, starting at
+// 172.16.0.28/30.
+//
+// To avoid reusing the same subnet for two different dynos (UIDs), make sure
+// (maxUID - minUID) <= /30 subnets that the CIDR block can provide. E.g.:
+// 172.17/16 can provide 2 ** (30-16) = 16384 /30 subnets, then to avoid subnets
+// being reused, make sure that (maxUID - minUID) <= 16384.
+func NewAllocator(
+	workDir string,
+	privateSubnet net.IPNet,
+	minUID, maxUID int,
+) (*Allocator, error) {
 	uids := filepath.Join(workDir, "uids")
 	if err := os.MkdirAll(uids, 0755); err != nil {
 		return nil, err
@@ -51,11 +67,35 @@ func NewAllocator(workDir string) (*Allocator, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: check if it is an ipv4 mask of 32 bits
+	subnetSize, _ := privateSubnet.Mask.Size()
+
+	// how many /30 subnets can the provided block generate?
+	// 2 ** (30 - subnetSize) - subnetsToSkip
+	availableSubnets := uint32(math.Pow(2, float64(30-subnetSize)))
+	toSkip, err := subnetsToSkip(privateSubnet.IP.To4(), subnetSize)
+	if err != nil {
+		return nil, err
+	}
+	availableSubnets -= toSkip
+
+	baseIP := net.IPNet{
+		IP:   privateSubnet.IP.To4(),
+		Mask: net.CIDRMask(30, 32),
+	}
+	subnet := net.IPNet{
+		privateSubnet.IP.Mask(privateSubnet.Mask).To4(),
+		privateSubnet.Mask,
+	}
 	return &Allocator{
-		uidsDir: uids,
+		uidsDir:          uids,
+		privateSubnet:    subnet,
+		basePrivateIP:    baseIP,
+		availableSubnets: availableSubnets,
 		// TODO: configurable ranges
-		minUID: 3000,
-		maxUID: 60000,
+		minUID: minUID,
+		maxUID: maxUID,
 		rng:    rand.New(rand.NewSource(seed.Int64())),
 	}, nil
 }
@@ -113,9 +153,9 @@ func (a *Allocator) FreeUID(uid int) error {
 // provides at most 2**18 = 262144 subnets of size /30, then (maxUID-minUID)
 // must be always smaller than 262144.
 func (a *Allocator) privateNetForUID(uid int) (*net.IPNet, error) {
-	shift := uint32(uid - a.minUID)
+	shift := uint32(uid-a.minUID) % a.availableSubnets
 	var asInt uint32
-	base := bytes.NewReader(basePrivateIP.IP.To4())
+	base := bytes.NewReader(a.basePrivateIP.IP.To4())
 	if err := binary.Read(base, binary.BigEndian, &asInt); err != nil {
 		return nil, err
 	}
@@ -130,14 +170,30 @@ func (a *Allocator) privateNetForUID(uid int) (*net.IPNet, error) {
 		return nil, err
 	}
 	ip := net.IP(buf.Bytes())
-	if !privateSubnet.Contains(ip) {
+	if !a.privateSubnet.Contains(ip) {
 		return nil, fmt.Errorf(
 			"the assigned IP %q falls out of the allowed subnet %q",
-			ip, privateSubnet,
+			ip, a.privateSubnet.String(),
 		)
 	}
 	return &net.IPNet{
 		IP:   ip,
-		Mask: basePrivateIP.Mask,
+		Mask: a.basePrivateIP.Mask,
 	}, nil
+}
+
+// baseIP has 32 bits. Subnets to skip is represented by bits[subnetSize:30] of
+// of the base IP. E.g.: for a /12 subnet, bits[12:30] of its base IP is the
+// number of subnets smaller than base IP that need to be skipped.
+func subnetsToSkip(baseIP net.IP, subnetSize int) (uint32, error) {
+	var baseIPAsInt uint32
+	b := bytes.NewReader(baseIP)
+	if err := binary.Read(b, binary.BigEndian, &baseIPAsInt); err != nil {
+		return 0, err
+	}
+	// cut the first subnetSize bits
+	toSkip := baseIPAsInt << uint32(subnetSize)
+	toSkip >>= uint32(subnetSize)
+	// cut the last 2 bits
+	return toSkip >> 2, nil
 }

@@ -22,6 +22,7 @@ var (
 // offering containers only layer 3 connectivity to the outside world.
 type Routed struct {
 	network.Veth
+	privateSubnet net.IPNet
 }
 
 // Create sets up a veth pair, setting the config.Gateway address on the master
@@ -83,12 +84,15 @@ func (r *Routed) enablePacketForwarding() error {
 }
 
 func (r *Routed) natOutboundTraffic() error {
+	// TODO the private network needs to be configurable
 	masquerade := []string{
 		"POSTROUTING", "-t", "nat",
-		"-s", privateSubnet.String(),
+		"-s", r.privateSubnet.String(),
 		"-j", "MASQUERADE",
 	}
-	if !iptables.Exists(masquerade...) {
+	if _, err := iptables.Raw(
+		append([]string{"-C"}, masquerade...)...,
+	); err != nil {
 		incl := append([]string{"-I"}, masquerade...)
 		if output, err := iptables.Raw(incl...); err != nil {
 			return err

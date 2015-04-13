@@ -10,45 +10,53 @@ import (
 	"testing"
 )
 
-// avoid clashes with IPs used by AWS (e.g.: the internal DNS server on
-// ec2-classic is 172.16.0.23).
-func TestFirstAvailablePrivateNet(t *testing.T) {
+// by default avoid clashes with IPs used by AWS (e.g.: the internal DNS server
+// on ec2-classic is 172.16.0.23).
+func TestFirstAvailableInDefaultPrivateNet(t *testing.T) {
 	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	minUID := 3000
-	net, err := allocator.privateNetForUID(minUID)
+	allocator, err := NewAllocator(
+		workDir, DefaultPrivateSubnet,
+		minUID, minUID+11000,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := basePrivateIP
-	if !bytes.Equal(net.IP, expected.IP) ||
-		!bytes.Equal(net.Mask, expected.Mask) {
-		t.Fatalf("the first available private network is not"+
-			" 172.16.0.28/30. Got %#+v, Want %#+v", net, expected)
+
+	first, err := allocator.privateNetForUID(minUID)
+	if err != nil {
+		t.Fatal(err)
 	}
+	checkIPNet(t, first, &net.IPNet{
+		IP:   net.IPv4(172, 16, 0, 28).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
 }
 
-// RFC1918: 172.16/12 private address space
-func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
+// RFC1918: 172.16/12 private address space is the default
+func TestAllocatesNetworksInRFC1918SpaceByDefault(t *testing.T) {
 	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir)
+
+	minUID := 3000
+	// the /12 block provides 2 ** 18 = 262144 /30 subnets, but the first 8
+	// are not being used (skipped) by default
+	maxUID := minUID + 262144 - 1 - 7
+	allocator, err := NewAllocator(
+		workDir, DefaultPrivateSubnet,
+		minUID, maxUID,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	minUID := 3000
-	maxUID := minUID + 262144
 
 	one, err := allocator.privateNetForUID(minUID + 1)
 	if err != nil {
@@ -77,9 +85,121 @@ func TestAllocatesNetworksInRFC1918Space(t *testing.T) {
 		Mask: net.CIDRMask(30, 32),
 	})
 
-	// out of the allowed range
-	if _, err := allocator.privateNetForUID(maxUID + 1); err == nil {
-		t.Fatal("uids outside of the allowed range should cause errors")
+	last, err := allocator.privateNetForUID(maxUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, last, &net.IPNet{
+		IP:   net.IPv4(172, 31, 255, 252).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+
+	// out of the available range will wrap
+	tooBig, err := allocator.privateNetForUID(maxUID + 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, tooBig, &net.IPNet{
+		IP:   net.IPv4(172, 16, 0, 28).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+}
+
+func TestAllocatesNetworksFromConfigurableBlock(t *testing.T) {
+	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(workDir)
+
+	// /16 block provides maximum 2**14 (16384) /30 subnets
+	block := net.IPNet{
+		IP:   net.IPv4(127, 128, 0, 0).To4(),
+		Mask: net.CIDRMask(16, 32),
+	}
+	minUID := 3000
+	maxUID := minUID + 16384 - 1
+	allocator, err := NewAllocator(workDir, block, minUID, maxUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := allocator.privateNetForUID(minUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, first, &net.IPNet{
+		IP:   net.IPv4(127, 128, 0, 0).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+
+	second, err := allocator.privateNetForUID(minUID + 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, second, &net.IPNet{
+		IP:   net.IPv4(127, 128, 0, 4).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+
+	big, err := allocator.privateNetForUID(minUID + 2036)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, big, &net.IPNet{
+		IP:   net.IPv4(127, 128, 31, 208).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+
+	last, err := allocator.privateNetForUID(maxUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, last, &net.IPNet{
+		IP:   net.IPv4(127, 128, 255, 252).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+
+	// out of the available range will wrap
+	tooBig, err := allocator.privateNetForUID(maxUID + 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkIPNet(t, tooBig, &net.IPNet{
+		IP:   net.IPv4(127, 128, 0, 0).To4(),
+		Mask: net.CIDRMask(30, 32),
+	})
+}
+
+// static IPs can be configured with a block that only provides one /30 subnet
+func TestAllowsStaticIP(t *testing.T) {
+	workDir, err := ioutil.TempDir("", "hsup-allocator-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(workDir)
+
+	// smallest possible block, only provides 1 /30 subnet
+	block := net.IPNet{
+		IP:   net.IPv4(127, 128, 0, 0).To4(),
+		Mask: net.CIDRMask(30, 32),
+	}
+	minUID := 3000
+	maxUID := 60000
+	allocator, err := NewAllocator(workDir, block, minUID, maxUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for uid := minUID; uid <= maxUID; uid++ {
+		subnet, err := allocator.privateNetForUID(uid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkIPNet(t, subnet, &net.IPNet{
+			IP:   net.IPv4(127, 128, 0, 0).To4(),
+			Mask: net.CIDRMask(30, 32),
+		})
 	}
 }
 
@@ -96,13 +216,11 @@ func TestFindsAvailableUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir)
+
+	allocator, err := NewAllocator(workDir, DefaultPrivateSubnet, 1, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocator.minUID = 1
-	allocator.maxUID = 3
-
 	// some uids are already allocated...
 	if err := createUIDFile(workDir, 1); err != nil {
 		t.Fatal(err)
@@ -131,13 +249,14 @@ func TestOnlyUsesFreeUIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(workDir)
-	allocator, err := NewAllocator(workDir)
+
+	allocator, err := NewAllocator(
+		workDir, DefaultPrivateSubnet,
+		3000, 3004,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocator.minUID = 3000
-	allocator.maxUID = 3004
-
 	// some uids are already allocated...
 	if err := createUIDFile(workDir, 3002); err != nil {
 		t.Fatal(err)
