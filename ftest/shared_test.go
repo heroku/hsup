@@ -31,6 +31,7 @@ var (
 		Name:    "test-app-123",
 		Env: map[string]string{
 			"TESTENTRY": "vAlId",
+			"PORT":      "5000",
 		},
 		Slug:      "https://s3.amazonaws.com/sclasen-herokuslugs/slug.tgz",
 		Stack:     "cedar-14",

@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/heroku/hsup"
 )
 
@@ -28,7 +30,7 @@ type output struct {
 	err bytes.Buffer
 }
 
-func run(app hsup.AppSerializable, hsupEnv []string, args ...string) (*output, error) {
+func run(app hsup.AppSerializable, socket string, hsupEnv []string, args ...string) (*output, error) {
 	controlDir, err := ioutil.TempDir("", "hsup-test-control")
 	if err != nil {
 		return nil, err
@@ -47,10 +49,12 @@ func run(app hsup.AppSerializable, hsupEnv []string, args ...string) (*output, e
 		return nil, err
 	}
 
-	cmd := exec.Command(binary, append(
-		[]string{"-d", driver, "run"},
-		args...,
-	)...)
+	cmdArgs := []string{"-d", driver}
+	if socket != "" {
+		cmdArgs = append(cmdArgs, "-s", socket)
+	}
+	cmdArgs = append(cmdArgs, "run")
+	cmd := exec.Command(binary, append(cmdArgs, args...)...)
 	cmd.Env = append(hsupEnv,
 		"PATH="+os.Getenv("PATH"),
 		"HSUP_CONTROL_DIR="+controlDir,
@@ -59,4 +63,28 @@ func run(app hsup.AppSerializable, hsupEnv []string, args ...string) (*output, e
 	cmd.Stdout = &output.out
 	cmd.Stderr = &output.err
 	return &output, cmd.Run()
+}
+
+func retryUntil(retries int, delay time.Duration, fn func() (bool, error)) (bool, error) {
+	var success bool
+	var err error
+
+	for i := 0; i < retries; i++ {
+		if i > 0 {
+			time.Sleep(delay)
+		}
+
+		success, err = fn()
+		if success {
+			return true, nil
+		}
+	}
+
+	return success, err
+}
+
+func newSocketFile() string {
+	base := filepath.Base("/")
+	socket := uuid.New() + ".sock"
+	return filepath.Join(base, "etc", "hsup", "containers", "sockets", socket)
 }
