@@ -13,6 +13,8 @@ import (
 	"github.com/heroku/hsup/diag"
 )
 
+const DefaultPort = "5000"
+
 type DynoState int
 
 const (
@@ -23,6 +25,7 @@ const (
 )
 
 type DynoInput int
+type IPInfo func() (ip string, port int)
 
 const (
 	Retire DynoInput = iota
@@ -61,8 +64,7 @@ type Executor struct {
 	NewInput chan DynoInput
 
 	// Status API fields
-	IPAddress string
-	Port      int
+	IPInfo IPInfo
 }
 
 func (ex *Executor) dlog(values ...interface{}) {

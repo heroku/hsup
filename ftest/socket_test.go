@@ -102,7 +102,7 @@ func verifyStatus(t *testing.T, client *http.Client) error {
 		return err
 	}
 
-	success, err := retryUntil(20, 500*time.Millisecond, func() (bool, error) {
+	success, err := retryUntil(30, 1*time.Second, func() (bool, error) {
 		res, err := client.Do(req)
 		if err != nil {
 			return false, err
@@ -148,7 +148,7 @@ func newSocketClient(socket string) *http.Client {
 func runProcess(t *testing.T) string {
 	socket := newSocketFile()
 	go func(t *testing.T) {
-		output, err := run(AppWithEnv, socket, []string{}, "sleep 20")
+		output, err := run(AppWithEnv, socket, []string{}, "sleep 5")
 		debug(t, output)
 		if err != nil {
 			t.Fatal(err)

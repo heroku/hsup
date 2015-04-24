@@ -1,9 +1,14 @@
 package hsup
 
 import (
+	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 )
+
+var ErrIPNotFound = errors.New("ip not found")
 
 type DynoDriver interface {
 	Build(*Release) error
@@ -58,4 +63,40 @@ func (r *Release) ConfigSlice() []string {
 		c = append(c, k+"="+v)
 	}
 	return c
+}
+
+func DefaultIPInfo(ex *Executor) (IPInfo, error) {
+	port, err := strconv.Atoi(ex.Release.config["PORT"])
+	if err != nil {
+		return nil, err
+	}
+
+	ip, err := lookupLocalIP()
+	if err != nil {
+		return nil, err
+	}
+
+	return func() (string, int) {
+		return ip, port
+	}, nil
+}
+
+func lookupLocalIP() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, addr := range addrs {
+		ip, ok := addr.(*net.IPNet)
+		if !ok && ip.IP.IsLoopback() {
+			continue
+		}
+
+		if v4 := ip.IP.To4(); v4 != nil {
+			return v4.String(), nil
+		}
+	}
+
+	return "", ErrIPNotFound
 }

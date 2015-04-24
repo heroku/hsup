@@ -131,6 +131,12 @@ func (hs *Startup) FromBase64Gob(payload string) {
 }
 
 func (hs *Startup) Procs() *Processes {
+	if hs.App.Env == nil {
+		hs.App.Env = make(map[string]string)
+	}
+	if _, ok := hs.App.Env["PORT"]; !ok {
+		hs.App.Env["PORT"] = DefaultPort
+	}
 	procs := &Processes{
 		Rel: &Release{
 			appName: hs.App.Name,
