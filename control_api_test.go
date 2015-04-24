@@ -9,20 +9,19 @@ import (
 )
 
 func TestControlApiGetStatus(t *testing.T) {
+
 	c := newControlAPI()
 	c.processes = &Processes{
 		Executors: []*Executor{
 			{
 				ProcessType: "web",
-				IPAddress:   "0.0.0.0",
-				Port:        5000,
 				State:       Started,
+				IPInfo:      stubIPInfo("0.0.0.0", 5000),
 			},
 			{
 				ProcessType: "worker",
-				IPAddress:   "1.1.1.1",
-				Port:        6000,
 				State:       Retiring,
+				IPInfo:      stubIPInfo("1.1.1.1", 6000),
 			},
 		},
 	}
@@ -95,5 +94,11 @@ func TestControlApiPostControlStop(t *testing.T) {
 func assert(t *testing.T, a, b interface{}) {
 	if a != b {
 		t.Fatalf("expected %v; was %v", a, b)
+	}
+}
+
+func stubIPInfo(ip string, port int) IPInfo {
+	return func() (string, int) {
+		return ip, port
 	}
 }

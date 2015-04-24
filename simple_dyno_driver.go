@@ -17,7 +17,7 @@ func (dd *SimpleDynoDriver) Build(release *Release) error {
 	return nil
 }
 
-func (dd *SimpleDynoDriver) Start(ex *Executor) error {
+func (dd *SimpleDynoDriver) Start(ex *Executor) (err error) {
 	args := []string{"bash", "-c"}
 	args = append(args, ex.Args...)
 	ex.cmd = exec.Command(args[0], args[1:]...)
@@ -47,14 +47,18 @@ func (dd *SimpleDynoDriver) Start(ex *Executor) error {
 		ex.cmd.Env = append(ex.cmd.Env, k+"="+v)
 	}
 
-	ex.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if ex.IPInfo, err = DefaultIPInfo(ex); err != nil {
+		return err
+	}
 
-	err := ex.cmd.Start()
+	ex.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	err = ex.cmd.Start()
 	if err != nil {
 		return err
 	}
 
 	ex.waiting = make(chan struct{})
+
 	return nil
 }
 

@@ -7,8 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
 	"strconv"
+
+	"github.com/fsouza/go-dockerclient"
 )
 
 type DockerDynoDriver struct {
@@ -87,7 +88,9 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	if err != nil {
 		log.Fatalln("could not create container:", err)
 	}
+
 	ex.container = container
+	ex.IPInfo = dd.IPInfo(ex)
 
 	err = dd.d.c.StartContainer(ex.container.ID, &docker.HostConfig{
 		Binds:           ex.bindPairs(),
@@ -98,16 +101,12 @@ func (dd *DockerDynoDriver) Start(ex *Executor) error {
 	}
 
 	go dd.d.c.Logs(docker.LogsOptions{
-		Container:    container.ID,
+		Container:    ex.container.ID,
 		Stdout:       true,
 		Stderr:       true,
 		Follow:       true,
 		OutputStream: os.Stdout,
 	})
-
-	exposed := ex.container.NetworkSettings.Ports[docker.Port("5000/tcp")]
-	ex.IPAddress = exposed[0].HostIP
-	ex.Port, _ = strconv.Atoi(exposed[0].HostPort)
 
 	return nil
 }
@@ -123,6 +122,23 @@ func (dd *DockerDynoDriver) Stop(ex *Executor) error {
 		ID:     ex.container.ID,
 		Signal: docker.Signal(syscall.SIGTERM)})
 	return dd.d.c.StopContainer(ex.container.ID, 10)
+}
+
+func (dd *DockerDynoDriver) IPInfo(ex *Executor) IPInfo {
+	return func() (string, int) {
+		container, err := dd.d.c.InspectContainer(ex.container.ID)
+		if err != nil {
+			return "", -1
+		}
+
+		exposed, ok := container.NetworkSettings.Ports[docker.Port("5000/tcp")]
+		if !ok || exposed[0].HostIP == "" {
+			return "", -1
+		}
+
+		port, _ := strconv.Atoi(exposed[0].HostPort)
+		return exposed[0].HostIP, port
+	}
 }
 
 func (dd *DockerDynoDriver) connectDocker() error {

@@ -145,10 +145,19 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err != nil {
 		return err
 	}
+
 	network, err := dd.networkFor(uid)
 	if err != nil {
 		return err
 	}
+	port, err := strconv.Atoi(ex.Release.config["PORT"])
+	if err != nil {
+		return err
+	}
+	ex.IPInfo = func() (string, int) {
+		return network.Address, port
+	}
+
 	stackImagePath, err := CurrentStackImagePath(
 		dd.stacksDir, ex.Release.stack,
 	)

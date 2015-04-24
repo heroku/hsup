@@ -50,9 +50,10 @@ func (c *ControlAPI) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	resp := StatusResponse{make(map[string]ProcessStatus)}
 	for _, e := range c.processes.Executors {
+		address, port := e.IPInfo()
 		resp.Processes[e.ProcessType] = ProcessStatus{
-			IPAddress: e.IPAddress,
-			Port:      e.Port,
+			IPAddress: address,
+			Port:      port,
 			Status:    e.State.String(),
 		}
 	}
