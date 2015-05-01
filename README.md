@@ -106,12 +106,7 @@ to share a common stack image directory between all containers to avoid
 downloading them every time:
 
 ```sh-session
-$ mkdir /tmp/stacks
-$ docker run --privileged -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
-...
-$ docker run --privileged -v /tmp/stacks:/var/lib/hsup/stacks -it hsup
-(stack images will be cached)
-...
+$ docker run --privileged -v /var/lib/hsup:/var/lib/hsup -it hsup
 ```
 
 A custom hsup control dir can be injected as a docker volume, in case custom

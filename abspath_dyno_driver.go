@@ -68,7 +68,8 @@ func (pr *profileRunner) Args(args []string) []string {
 	return append([]string{pr.file.Name()}, args...)
 }
 
-type AbsPathDynoDriver struct{}
+type AbsPathDynoDriver struct {
+}
 
 func (dd *AbsPathDynoDriver) fetch(release *Release) error {
 	if release.slugURL == "" {
@@ -171,18 +172,22 @@ func (dd *AbsPathDynoDriver) Start(ex *Executor) (err error) {
 
 	// Fill environment vector from Heroku configuration, with a
 	// default $PATH.
-	ex.cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:" +
-		"/usr/sbin:/usr/bin:/sbin:/bin",
-		"HOME=/app", "DYNO=" + ex.Name(), "PORT=5000"}
-
+	ex.cmd.Env = []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"HOME=/app",
+		"DYNO=" + ex.Name(),
+	}
 	for k, v := range ex.Release.config {
 		ex.cmd.Env = append(ex.cmd.Env, k+"="+v)
+	}
+
+	if ex.IPInfo, err = DefaultIPInfo(ex); err != nil {
+		return err
 	}
 
 	ex.cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
-
 	if err = ex.cmd.Start(); err != nil {
 		return err
 	}

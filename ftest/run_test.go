@@ -11,7 +11,7 @@ func TestEnv(t *testing.T) {
 		return
 	}
 
-	output, err := run(AppMinimal, []string{}, "env")
+	output, err := run(AppMinimal, "", []string{}, "env")
 	debug(t, output)
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestEnv(t *testing.T) {
 }
 
 func TestSimpleBashExprWithVar(t *testing.T) {
-	output, err := run(AppWithEnv, []string{}, "echo $TESTENTRY")
+	output, err := run(AppWithEnv, "", []string{}, "echo $TESTENTRY")
 	debug(t, output)
 	if err != nil {
 		t.Fatal(err)

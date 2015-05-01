@@ -50,9 +50,9 @@ type Startup struct {
 	// Formation name for "Start" action.
 	FormName string
 
-	// ControlPort specifies the TCP port the hsup API listens on.
-	// Set to nil when API support is disabled.
-	ControlPort *int
+	// ControlSocket specifies the unix socket the hsup API listens on.
+	// Set to "" when API support is disabled.
+	ControlSocket string
 
 	// For use with "run".
 	Args []string
@@ -131,6 +131,12 @@ func (hs *Startup) FromBase64Gob(payload string) {
 }
 
 func (hs *Startup) Procs() *Processes {
+	if hs.App.Env == nil {
+		hs.App.Env = make(map[string]string)
+	}
+	if _, ok := hs.App.Env["PORT"]; !ok {
+		hs.App.Env["PORT"] = DefaultPort
+	}
 	procs := &Processes{
 		Rel: &Release{
 			appName: hs.App.Name,
