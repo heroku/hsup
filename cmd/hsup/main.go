@@ -19,7 +19,10 @@ import (
 // CmdLogplexURL is non-nil when a logplex URL is specified on the
 // command line.  This has priority over the Control Directory variant
 // of the same setting.
-var CmdLogplexURL *url.URL
+var (
+	CmdLogplexURL *url.URL
+	controlApi    *hsup.ControlAPI
+)
 
 func statuses(p *hsup.Processes) <-chan []*hsup.ExitStatus {
 	if p == nil || !p.OneShot {
@@ -358,7 +361,12 @@ func main() {
 	var p *hsup.Processes
 
 	if hs.ControlSocket != "" {
-		procs = hsup.StartControlAPI(hs.ControlSocket, procs)
+		controlApi, procs = hsup.NewControlAPI(hs.ControlSocket, procs)
+		go func() {
+			if err := controlApi.Listen(); err != nil {
+				log.Fatal(err)
+			}
+		}()
 	}
 
 	for {
@@ -369,6 +377,9 @@ func main() {
 			}
 			p = newProcs
 			if err = start(p, &hs, args); err != nil {
+				if controlApi != nil {
+					controlApi.Close()
+				}
 				log.Fatalln("could not start process:", err)
 			}
 		case statv := <-statuses(p):
@@ -388,7 +399,14 @@ func main() {
 						exitVal = s.Code
 					}
 				}
+				if controlApi != nil {
+					controlApi.Close()
+				}
 				os.Exit(exitVal)
+			}
+
+			if controlApi != nil {
+				controlApi.Close()
 			}
 			os.Exit(0)
 		case sig := <-signals:
@@ -397,6 +415,9 @@ func main() {
 				stopParallel(p)
 			}
 			// TODO: capture the exit status from executors
+			if controlApi != nil {
+				controlApi.Close()
+			}
 			os.Exit(1)
 		}
 	}

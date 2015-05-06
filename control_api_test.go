@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	"code.google.com/p/go-uuid/uuid"
 )
 
 func TestControlApiGetStatus(t *testing.T) {
-
-	c := newControlAPI()
+	c, _ := NewControlAPI("", nil)
 	c.processes = &Processes{
 		Executors: []*Executor{
 			{
@@ -55,7 +60,7 @@ func TestControlApiPostControlStop(t *testing.T) {
 		Processes: []string{"web", "worker"},
 	})
 
-	c := newControlAPI()
+	c, _ := NewControlAPI("", nil)
 	c.processes = &Processes{
 		Executors: []*Executor{
 			{
@@ -91,6 +96,84 @@ func TestControlApiPostControlStop(t *testing.T) {
 	assert(t, "worker", response.StoppedProcesses[1])
 }
 
+func TestListenCreatesAndRemovesSocket(t *testing.T) {
+	socket := filepath.Join("/", "tmp", uuid.New()+".sock")
+	procs := make(chan *Processes)
+	api, _ := NewControlAPI(socket, procs)
+
+	go func(t *testing.T) {
+		if err := api.Listen(); !isAllowedError(err) {
+			t.Fatal(err)
+		}
+	}(t)
+
+	_, err := retryUntil(5, time.Second, func() (bool, error) {
+		rerr := api.ping()
+		return rerr == nil, rerr
+	})
+	assert(t, nil, err)
+
+	_, err = retryUntil(5, time.Second, func() (bool, error) {
+		_, rerr := os.Stat(socket)
+		return rerr == nil, rerr
+	})
+	assert(t, nil, err)
+
+	api.Close()
+
+	_, err = retryUntil(5, time.Second, func() (bool, error) {
+		_, rerr := os.Stat(socket)
+		return os.IsNotExist(rerr), rerr
+	})
+	assert(t, true, os.IsNotExist(err))
+}
+
+func TestListenErrorsSocketInUse(t *testing.T) {
+	socket := filepath.Join("/", "tmp", uuid.New()+".sock")
+	api, _ := NewControlAPI(socket, make(chan *Processes))
+	go func(t *testing.T) {
+		if err := api.Listen(); !isAllowedError(err) {
+			t.Fatal(err)
+		}
+	}(t)
+
+	defer api.Close()
+
+	_, err := retryUntil(5, time.Second, func() (bool, error) {
+		rerr := api.ping()
+		return rerr == nil, rerr
+	})
+	assert(t, nil, err)
+
+	anotherApi, _ := NewControlAPI(socket, make(chan *Processes))
+	assert(t, ErrSocketInUse, anotherApi.Listen())
+}
+
+func TestNewListenerReusesSocket(t *testing.T) {
+	socket := filepath.Join("/", "tmp", uuid.New()+".sock")
+	_, err := os.Create(socket)
+	assert(t, nil, err)
+
+	_, err = os.Stat(socket)
+	assert(t, nil, err)
+
+	api, _ := NewControlAPI(socket, make(chan *Processes))
+
+	go func(t *testing.T) {
+		if err := api.Listen(); !isAllowedError(err) {
+			t.Fatal(err)
+		}
+	}(t)
+
+	defer api.Close()
+
+	_, err = retryUntil(5, time.Second, func() (bool, error) {
+		rerr := api.ping()
+		return rerr == nil, rerr
+	})
+	assert(t, nil, err)
+}
+
 func assert(t *testing.T, a, b interface{}) {
 	if a != b {
 		t.Fatalf("expected %v; was %v", a, b)
@@ -101,4 +184,29 @@ func stubIPInfo(ip string, port int) IPInfo {
 	return func() (string, int) {
 		return ip, port
 	}
+}
+
+func isAllowedError(err error) bool {
+	if err == nil {
+		return true
+	}
+	return strings.Contains(err.Error(), "use of closed network connection")
+}
+
+func retryUntil(retries int, delay time.Duration, fn func() (bool, error)) (bool, error) {
+	var success bool
+	var err error
+
+	for i := 0; i < retries; i++ {
+		if i > 0 {
+			time.Sleep(delay)
+		}
+
+		success, err = fn()
+		if success {
+			return true, err
+		}
+	}
+
+	return success, err
 }

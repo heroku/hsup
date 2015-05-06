@@ -2,9 +2,13 @@ package hsup
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"strings"
+	"time"
 )
 
 type ProcessStatus struct {
@@ -28,7 +32,11 @@ type StopResponse struct {
 type ControlAPI struct {
 	*http.ServeMux
 	processes *Processes
+	socket    string
+	listener  net.Listener
 }
+
+var ErrSocketInUse = errors.New("socket in use")
 
 func (c *ControlAPI) Tee(procs <-chan *Processes) <-chan *Processes {
 	out := make(chan *Processes)
@@ -40,6 +48,67 @@ func (c *ControlAPI) Tee(procs <-chan *Processes) <-chan *Processes {
 		}
 	}()
 	return out
+}
+
+func (c *ControlAPI) Listen() error {
+	var err error
+	c.listener, err = net.Listen("unix", c.socket)
+	if err != nil {
+		if !strings.Contains(err.Error(), "address already in use") {
+			return err
+		}
+
+		if err := c.ping(); err == nil {
+			return ErrSocketInUse
+		} else {
+			if _, err := os.Stat(c.socket); err == nil {
+				if err := os.Remove(c.socket); err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+
+		c.listener, err = net.Listen("unix", c.socket)
+		if err != nil {
+			return err
+		}
+	}
+
+	return http.Serve(c.listener, c)
+}
+
+func (c *ControlAPI) ping() error {
+	client := &http.Client{
+		Transport: &http.Transport{
+			Dial: func(nwk, addr string) (net.Conn, error) {
+				return net.Dial("unix", c.socket)
+			},
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	r, err := http.NewRequest("GET", "http://hsup/health", nil)
+	if err != nil {
+		return err
+	}
+
+	res, err := client.Do(r)
+	if res != nil {
+		res.Body.Close()
+	}
+	return err
+}
+
+func (c *ControlAPI) Close() {
+	if c.listener != nil {
+		c.listener.Close()
+	}
+}
+
+func (c *ControlAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("OK"))
 }
 
 func (c *ControlAPI) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -89,20 +158,11 @@ func (c *ControlAPI) handleControlStop(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(StopResponse{stopped})
 }
 
-func StartControlAPI(socket string, processes <-chan *Processes) <-chan *Processes {
-	api := newControlAPI()
-	listener, err := net.Listen("unix", socket)
-	if err != nil {
-		panic(err)
-	}
-	go http.Serve(listener, api)
-	return api.Tee(processes)
-}
-
-func newControlAPI() *ControlAPI {
-	api := &ControlAPI{http.NewServeMux(), nil}
+func NewControlAPI(socket string, processes <-chan *Processes) (*ControlAPI, <-chan *Processes) {
+	api := &ControlAPI{http.NewServeMux(), nil, socket, nil}
 	api.HandleFunc("/control/stop", api.handleControlStop)
 	api.HandleFunc("/status", api.handleStatus)
+	api.HandleFunc("/health", api.handleHealth)
 
-	return api
+	return api, api.Tee(processes)
 }
