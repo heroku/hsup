@@ -155,7 +155,8 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 	ex.IPInfo = func() (string, int) {
-		return network.Address, port
+		ip := strings.Split(network.Address, "/")
+		return ip[0], port
 	}
 
 	stackImagePath, err := CurrentStackImagePath(
