@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
-
-	"strconv"
 
 	"github.com/fsouza/go-dockerclient"
 )
@@ -136,8 +136,9 @@ func (dd *DockerDynoDriver) IPInfo(ex *Executor) IPInfo {
 			return "", -1
 		}
 
+		ip := strings.Split(exposed[0].HostIP, "/")
 		port, _ := strconv.Atoi(exposed[0].HostPort)
-		return exposed[0].HostIP, port
+		return ip[0], port
 	}
 }
 

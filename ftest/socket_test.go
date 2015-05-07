@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,10 @@ func TestSocketGetStatus(t *testing.T) {
 
 	if was := status.Processes["run"].IPAddress; was == "" {
 		t.Fatalf("did not expect IPAddress to be %q", was)
+	}
+
+	if strings.Contains(status.Processes["run"].IPAddress, "/") {
+		t.Fatalf("IPAddress %q contains subnet", status.Processes["run"].IPAddress)
 	}
 
 	if was := status.Processes["run"].Port; was == 0 {
