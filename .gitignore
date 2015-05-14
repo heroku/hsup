@@ -1,8 +1,8 @@
 tmp
 .idea
 *.iml
-hsup
-hsup-linux-amd64
+/hsup
+/hsup-linux-amd64
 hsctl
 supctl
 
