@@ -4,12 +4,7 @@ go: 1.4.2
 before_install:
 - export PATH=$HOME/gopath/bin:$PATH
 - go get github.com/tools/godep
-script:
-- godep go test ./...
-- make deb-local
-- if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then b="build-$TRAVIS_BRANCH-$TRAVIS_COMMIT.tgz";
-  pip install --user awscli && cd deb && tar -czf $b *.deb && ~/.local/bin/aws s3
-  cp --acl public-read $b s3://heroku-hsup; fi
+script: godep go test ./... && make deb-local version=$(git describe --tags --always | sed -e 's/^v//') && if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then b="build-$TRAVIS_BRANCH-$TRAVIS_COMMIT.tgz"; pip install --user awscli && cd deb && tar -czf $b *.deb && ~/.local/bin/aws s3 cp --acl public-read $b s3://heroku-hsup; fi
 notifications:
   email: false
   hipchat:

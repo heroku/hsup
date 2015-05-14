@@ -13,7 +13,7 @@ gosrc          := src/github.com/heroku/hsup
 
 # deb build vars
 packagename    := hsup
-version        := 0.0.10
+version        ?= 0.0.10
 buildpath      := $(shell pwd)/deb
 controldir     := $(buildpath)/DEBIAN
 installpath    := $(buildpath)/usr/bin
@@ -102,4 +102,3 @@ boot2docker-init:
 	boot2docker ssh "sudo sh -c \
 	    'mkdir -p /mnt/sda1/var/lib/hsup && \
 	    ln -sf /mnt/sda1/var/lib/hsup /var/lib/hsup'"
-
