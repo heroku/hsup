@@ -38,6 +38,8 @@ type ControlAPI struct {
 
 var ErrSocketInUse = errors.New("socket in use")
 
+const SocketPerm os.FileMode = 0770
+
 func (c *ControlAPI) Tee(procs <-chan *Processes) <-chan *Processes {
 	out := make(chan *Processes)
 	go func() {
@@ -74,6 +76,10 @@ func (c *ControlAPI) Listen() error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if err := os.Chmod(c.socket, os.ModeSocket|SocketPerm); err != nil {
+		return err
 	}
 
 	return http.Serve(c.listener, c)

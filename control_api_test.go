@@ -113,6 +113,10 @@ func TestListenCreatesAndRemovesSocket(t *testing.T) {
 	})
 	assert(t, nil, err)
 
+	stat, err := os.Stat(socket)
+	assert(t, nil, err)
+	assert(t, os.ModeSocket|SocketPerm, stat.Mode())
+
 	_, err = retryUntil(5, time.Second, func() (bool, error) {
 		_, rerr := os.Stat(socket)
 		return rerr == nil, rerr
