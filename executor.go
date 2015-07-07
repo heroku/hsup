@@ -11,6 +11,7 @@ import (
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/heroku/hsup/diag"
+	"github.com/opencontainers/runc/libcontainer"
 )
 
 const DefaultPort = "5000"
@@ -57,6 +58,7 @@ type Executor struct {
 
 	// libcontainer dyno driver properties
 	initExitStatus chan *ExitStatus
+	initProcess    *libcontainer.Process
 
 	// FSM Fields
 	OneShot  bool
@@ -97,7 +99,7 @@ func (ex *Executor) Tick() (err error) {
 	start := func() error {
 		log.Printf("%v: starting\n", ex.Name())
 		if err = ex.DynoDriver.Start(ex); err != nil {
-			log.Printf("%v: start fails: %q", ex.Name(), err.Error())
+			log.Printf("%v: start fails: %#+v", ex.Name(), err)
 			if ex.OneShot {
 				go ex.Trigger(Retire)
 			} else {

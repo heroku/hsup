@@ -53,8 +53,6 @@ func findDynoDriver(name string) (hsup.DynoDriver, error) {
 		return &hsup.AbsPathDynoDriver{}, nil
 	case "libcontainer":
 		return hsup.NewLibContainerDynoDriver("/var/lib/hsup")
-	case "libcontainer-init":
-		return &hsup.LibContainerInitDriver{}, nil
 	default:
 		return nil, fmt.Errorf("could not locate driver. "+
 			"specified by the user: %v", name)
