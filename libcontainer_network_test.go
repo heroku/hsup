@@ -12,7 +12,7 @@ func TestAddressesInsideSmallSubnet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := newSmallSubnet(subnet)
+	n, err := NewSmallSubnet(subnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,10 +39,10 @@ func TestAcceptsOnlySlash30Masks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := newSmallSubnet(sn24); err != ErrInvalidIPMask {
+	if _, err := NewSmallSubnet(sn24); err != ErrInvalidIPMask {
 		t.Fatalf("/24 should not be accepted")
 	}
-	if _, err := newSmallSubnet(sn16); err != ErrInvalidIPMask {
+	if _, err := NewSmallSubnet(sn16); err != ErrInvalidIPMask {
 		t.Fatalf("/16 should not be accepted")
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/cyberdelia/heroku-go/v3"
+	"github.com/docker/docker/pkg/reexec"
 	"github.com/heroku/hsup"
 	"github.com/heroku/hsup/diag"
 	flag "github.com/ogier/pflag"
@@ -53,8 +54,6 @@ func findDynoDriver(name string) (hsup.DynoDriver, error) {
 		return &hsup.AbsPathDynoDriver{}, nil
 	case "libcontainer":
 		return hsup.NewLibContainerDynoDriver("/var/lib/hsup")
-	case "libcontainer-init":
-		return &hsup.LibContainerInitDriver{}, nil
 	default:
 		return nil, fmt.Errorf("could not locate driver. "+
 			"specified by the user: %v", name)
@@ -310,6 +309,9 @@ func logplexDefault(p *hsup.Processes) *url.URL {
 }
 
 func main() {
+	if reexec.Init() {
+		return
+	}
 	dumpOnSignal()
 	var err error
 	log.Println("Starting hsup")

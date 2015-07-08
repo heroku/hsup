@@ -4,25 +4,22 @@ package hsup
 
 import (
 	"bytes"
-	"encoding/gob"
 	"fmt"
 	"log"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"code.google.com/p/go-uuid/uuid"
 
-	"github.com/docker/libcontainer"
-	"github.com/docker/libcontainer/cgroups"
-	"github.com/docker/libcontainer/devices"
-	"github.com/docker/libcontainer/mount"
-	"github.com/docker/libcontainer/namespaces"
-	"github.com/docker/libcontainer/network"
+	"github.com/docker/libnetwork"
+	"github.com/opencontainers/runc/libcontainer"
+	"github.com/opencontainers/runc/libcontainer/configs"
 )
 
 var (
@@ -37,6 +34,9 @@ type LibContainerDynoDriver struct {
 	stacksDir     string
 	containersDir string
 	allocator     *Allocator
+
+	controller libnetwork.NetworkController
+	network    libnetwork.Network
 }
 
 // init reads custom configuration from ENV vars:
@@ -44,6 +44,18 @@ type LibContainerDynoDriver struct {
 // - LIBCONTAINER_DYNO_UID_MIN
 // - LIBCONTAINER_DYNO_UID_MAX
 func init() {
+	// hack to act as PID=1 inside containers
+	if len(os.Args) > 1 && os.Args[1] == "libcontainer-init" {
+		runtime.GOMAXPROCS(1)
+		runtime.LockOSThread()
+		factory, _ := libcontainer.New("")
+		if err := factory.StartInitialization(); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+		panic("this should never be executed")
+	}
+
 	dynoPrivateSubnet = DefaultPrivateSubnet
 	if custom := strings.TrimSpace(
 		os.Getenv("LIBCONTAINER_DYNO_SUBNET"),
@@ -57,7 +69,6 @@ func init() {
 			Mask: subnet.Mask,
 		}
 	}
-	network.AddStrategy("routed", &Routed{privateSubnet: dynoPrivateSubnet})
 
 	if minUID := strings.TrimSpace(
 		os.Getenv("LIBCONTAINER_DYNO_UID_MIN"),
@@ -97,11 +108,27 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err != nil {
 		return nil, err
 	}
+	controller, err := libnetwork.New()
+	if err != nil {
+		return nil, err
+	}
+	if err := RegisterRoutedDriver(controller); err != nil {
+		return nil, err
+	}
+	dynoSubnetOpt := libnetwork.NetworkOptionGeneric(map[string]interface{}{
+		"subnet": dynoPrivateSubnet,
+	})
+	network, err := controller.NewNetwork("routed", "dynos", dynoSubnetOpt)
+	if err != nil {
+		return nil, err
+	}
 	return &LibContainerDynoDriver{
 		workDir:       workDir,
 		stacksDir:     stacksDir,
 		containersDir: containersDir,
 		allocator:     allocator,
+		controller:    controller,
+		network:       network,
 	}, nil
 }
 
@@ -121,31 +148,28 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 	return nil
 }
 
-func (dd *LibContainerDynoDriver) networkFor(uid int) (*libcontainer.Network, error) {
+func (dd *LibContainerDynoDriver) networkFor(uid int) (*SmallSubnet, error) {
 	sn, err := dd.allocator.privateNetForUID(uid)
 	if err != nil {
 		return nil, err
 	}
-	subnet, err := newSmallSubnet(sn)
+	subnet, err := NewSmallSubnet(sn)
 	if err != nil {
 		return nil, err
 	}
-	return &libcontainer.Network{
-		Address:    subnet.Host().String(),
-		VethPrefix: fmt.Sprintf("veth%d", uid),
-		Gateway:    subnet.Gateway().IP.String(),
-		Mtu:        1500,
-		Type:       "routed",
-	}, nil
+	return subnet, nil
 }
 
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
+	ex.initExitStatus = make(chan *ExitStatus)
+
 	containerUUID := uuid.New()
 	uid, err := dd.allocator.ReserveUID()
 	if err != nil {
 		return err
 	}
 
+	// Network
 	network, err := dd.networkFor(uid)
 	if err != nil {
 		return err
@@ -155,10 +179,25 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 	ex.IPInfo = func() (string, int) {
-		ip := strings.Split(network.Address, "/")
-		return ip[0], port
+		return network.Host().IP.String(), port
 	}
 
+	addressOpt := map[string]interface{}{
+		"subnet": network,
+	}
+	endpoint, err := dd.network.CreateEndpoint(containerUUID,
+		libnetwork.EndpointOptionGeneric(addressOpt),
+	)
+	if err != nil {
+		return err
+	}
+	if err := endpoint.Join(containerUUID,
+		libnetwork.JoinOptionHostname(containerUUID),
+	); err != nil {
+		return err
+	}
+
+	// Root FS
 	stackImagePath, err := CurrentStackImagePath(
 		dd.stacksDir, ex.Release.stack,
 	)
@@ -171,6 +210,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	}
 	writablePaths := []string{
 		filepath.Join(dataPath, "app"),
+		filepath.Join(dataPath, "dev"),
 		filepath.Join(dataPath, "tmp"),
 		filepath.Join(dataPath, "var", "tmp"),
 	}
@@ -222,67 +262,117 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 
-	// TODO tty
-	console := ""
-
-	ex.initExitStatus = make(chan *ExitStatus)
-
-	cfgReader, cfgWriter, err := os.Pipe()
-	initCtx := &containerInit{
-		hsupBinaryPath: outsideContainer,
-		ex:             ex,
-		configPipe:     cfgReader,
+	// Init (PID=1) hsup process with the abspath driver
+	hsupConfig := Startup{
+		App: AppSerializable{
+			Version: ex.Release.version,
+			Env:     ex.Release.config,
+			Slug:    ex.Release.slugURL,
+			Stack:   ex.Release.stack,
+			Processes: []FormationSerializable{
+				{
+					FArgs:     ex.Args,
+					FQuantity: 1,
+					FType:     ex.ProcessType,
+				},
+			},
+			LogplexURL: ex.logplexURLString(),
+		},
+		OneShot:     true,
+		SkipBuild:   false,
+		StartNumber: ex.ProcessID,
+		Action:      Start,
+		Driver:      &AbsPathDynoDriver{},
+		FormName:    ex.ProcessType,
 	}
+	hsupInit := &libcontainer.Process{
+		Args:   []string{"/tmp/hsup"},
+		Env:    []string{"HSUP_CONTROL_GOB=" + hsupConfig.ToBase64Gob()},
+		Cwd:    "/app",
+		User:   fmt.Sprintf("%d:%d", uid, uid),
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+	ex.initProcess = hsupInit
 
-	container := containerConfig(
-		containerUUID, uid, dataPath, network, ex.Release.ConfigSlice(),
-	)
-
-	// send config to the init process inside the container
-	go func() {
-		defer cfgWriter.Close()
-		encoder := gob.NewEncoder(cfgWriter)
-		if err := encoder.Encode(container); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	go func() {
-		// TODO: stop swallowing errors
-		code, err := namespaces.Exec(
-			container, os.Stdin, os.Stdout, os.Stderr,
-			console, dataPath, []string{},
-			initCtx.createCommand, nil, initCtx.startCallback,
-		)
-		if err != nil {
-			log.Printf("namespaces.Exec fails: %q", err)
-		}
-
-		// GC
-		// TODO: gc after sending back the exit status
-		// doing so right now terminates the program too early,
-		// before everything is removed
-		if err := syscall.Unmount(rootFSPath, 0); err != nil {
-			log.Printf("unmount error: %#+v", err)
-		}
-		for _, path := range writablePaths {
-			if err := os.RemoveAll(path); err != nil {
-				log.Printf("remove all error: %#+v", err)
+	var container libcontainer.Container
+	// GC
+	defer func() {
+		go func() {
+			// TODO: stop swallowing errors
+			code, err := hsupInit.Wait()
+			if err != nil {
+				log.Printf("process.Wait fails: %q", err)
 			}
-		}
-		if err := os.RemoveAll(dataPath); err != nil {
-			log.Printf("remove all error: %#+v", err)
-		}
 
-		// it's probably safe to ignore errors here. Worst case
-		// scenario, this uid won't be be reused.
-		dd.allocator.FreeUID(uid)
+			// TODO: gc after sending back the exit status
+			// doing so right now terminates the program too early,
+			// before everything is removed
+			if container != nil {
+				if err := container.Destroy(); err != nil {
+					log.Printf(
+						"container.Destroy error: %#+v",
+						err,
+					)
+				}
+			}
+			if err := syscall.Unmount(rootFSPath, 0); err != nil {
+				log.Printf("unmount error: %#+v", err)
+			}
+			for _, path := range writablePaths {
+				if err := os.RemoveAll(path); err != nil {
+					log.Printf("remove all error: %#+v", err)
+				}
+			}
+			if err := os.RemoveAll(dataPath); err != nil {
+				log.Printf("datapath remove all error: %#+v", err)
+			}
+			if err := dd.controller.LeaveAll(containerUUID); err != nil {
+				log.Printf("controller.LeaveAll error: %#+v", err)
+			}
+			if err := endpoint.Delete(); err != nil {
+				log.Printf("endpoint.Leave error: %#+v", err)
+			}
+			netGCDone := make(chan struct{}, 1)
+			go func() {
+				dd.controller.GC()
+				netGCDone <- struct{}{}
+			}()
+			// wait at most 10s
+			select {
+			case <-netGCDone:
+			case <-time.After(10 * time.Second):
+			}
 
-		ex.initExitStatus <- &ExitStatus{Code: code, Err: err}
-		close(ex.initExitStatus)
+			// it's probably safe to ignore errors here. Worst case
+			// scenario, this uid won't be be reused.
+			dd.allocator.FreeUID(uid)
+
+			// TODO: handle exit status when signaled
+			ex.initExitStatus <- &ExitStatus{
+				Code: code.Sys().(syscall.WaitStatus).ExitStatus(),
+				Err:  err,
+			}
+			close(ex.initExitStatus)
+		}()
 	}()
 
-	return nil
+	// Container Exec
+	factory, err := libcontainer.New(
+		filepath.Join(dd.containersDir, "libcontainer"),
+		libcontainer.InitArgs(os.Args[0], "libcontainer-init"),
+	)
+	if err != nil {
+		return err
+	}
+	container, err = factory.Create(containerUUID, containerConfig(
+		containerUUID, dataPath, endpoint.Info().SandboxKey(),
+	))
+	if err != nil {
+		return err
+	}
+	return container.Start(hsupInit)
 }
 
 func (dd *LibContainerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
@@ -290,15 +380,8 @@ func (dd *LibContainerDynoDriver) Wait(ex *Executor) (s *ExitStatus) {
 }
 
 func (dd *LibContainerDynoDriver) Stop(ex *Executor) error {
-	if ex.cmd.ProcessState != nil {
-		return nil // already exited
-	}
-
-	// TODO: fix a race conditition when Stop() is called before the
-	// libcontainer driver re-execs itself
-
 	// tell the abspath-driver to stop
-	return ex.cmd.Process.Signal(syscall.SIGTERM)
+	return ex.initProcess.Signal(syscall.SIGTERM)
 }
 
 func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
@@ -330,122 +413,122 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 	return err
 }
 
-type containerInit struct {
-	hsupBinaryPath string
-	ex             *Executor
-	configPipe     *os.File
-}
+const defaultMountFlags = syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
 
-func (ctx *containerInit) createCommand(container *libcontainer.Config, console,
-	dataPath, init string, controlPipe *os.File, args []string) *exec.Cmd {
-
-	hs := Startup{
-		App: AppSerializable{
-			Version: ctx.ex.Release.version,
-			Env:     ctx.ex.Release.config,
-			Slug:    ctx.ex.Release.slugURL,
-			Stack:   ctx.ex.Release.stack,
-			Processes: []FormationSerializable{
-				{
-					FArgs:     ctx.ex.Args,
-					FQuantity: 1,
-					FType:     ctx.ex.ProcessType,
-				},
+func containerConfig(containerUUID string, dataPath string, netNS string) *configs.Config {
+	return &configs.Config{
+		Mounts: []*configs.Mount{
+			{
+				Source:      "proc",
+				Destination: "/proc",
+				Device:      "proc",
+				Flags:       defaultMountFlags,
 			},
-			LogplexURL: ctx.ex.logplexURLString(),
-		},
-		OneShot:     true,
-		StartNumber: ctx.ex.ProcessID,
-		Action:      Start,
-		Driver:      &LibContainerInitDriver{},
-		FormName:    ctx.ex.ProcessType,
-	}
-	cmd := exec.Command(ctx.hsupBinaryPath)
-	cmd.Env = []string{"HSUP_CONTROL_GOB=" + hs.ToBase64Gob()}
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.Cloneflags = uintptr(
-		namespaces.GetNamespaceFlags(container.Namespaces),
-	)
-	cmd.SysProcAttr.Pdeathsig = syscall.SIGKILL
-	cmd.ExtraFiles = []*os.File{controlPipe, ctx.configPipe}
-	ctx.ex.cmd = cmd
-	return cmd
-}
-
-func (ctx *containerInit) startCallback() {
-	//TODO: log("Starting process web.1 with command `...`")
-
-	//child process is already running, it's safe to close the parent's read
-	//side of the pipe
-	ctx.configPipe.Close()
-}
-
-func containerConfig(
-	containerUUID string,
-	uid int,
-	dataPath string,
-	network *libcontainer.Network,
-	env []string,
-) *libcontainer.Config {
-	return &libcontainer.Config{
-		MountConfig: &libcontainer.MountConfig{
-			Mounts: []*mount.Mount{
-				{
-					Type:        "bind",
-					Destination: "/app",
-					Writable:    true,
-					Source:      filepath.Join(dataPath, "app"),
-				},
-				{
-					Type:        "bind",
-					Destination: "/tmp",
-					Writable:    true,
-					Source:      filepath.Join(dataPath, "tmp"),
-				},
-				{
-					Type:        "bind",
-					Destination: "/var/tmp",
-					Writable:    true,
-					Source: filepath.Join(
-						dataPath,
-						"var", "tmp",
-					),
-				},
-				{
-					Type:        "bind",
-					Destination: "/etc/passwd",
-					Writable:    false,
-					Source: filepath.Join(
-						dataPath, "passwd",
-					),
-				},
-				{
-					Type:        "bind",
-					Writable:    false,
-					Destination: "/etc/resolv.conf",
-					Source:      "/etc/resolv.conf",
-				},
+			{
+				Source:      "tmpfs",
+				Destination: "/dev",
+				Device:      "tmpfs",
+				Flags:       syscall.MS_NOSUID | syscall.MS_STRICTATIME,
+				Data:        "mode=755",
 			},
-			MountLabel:  containerUUID,
-			DeviceNodes: devices.DefaultSimpleDevices,
-			PivotDir:    "/tmp",
+			{
+				Source:      "devpts",
+				Destination: "/dev/pts",
+				Device:      "devpts",
+				Flags:       syscall.MS_NOSUID | syscall.MS_NOEXEC,
+				Data:        "newinstance,ptmxmode=0666,mode=0620,gid=5",
+			},
+			{
+				Device:      "tmpfs",
+				Source:      "shm",
+				Destination: "/dev/shm",
+				Data:        "mode=1777,size=65536k",
+				Flags:       defaultMountFlags,
+			},
+			{
+				Source:      "mqueue",
+				Destination: "/dev/mqueue",
+				Device:      "mqueue",
+				Flags:       defaultMountFlags,
+			},
+			{
+				Source:      "sysfs",
+				Destination: "/sys",
+				Device:      "sysfs",
+				Flags:       defaultMountFlags | syscall.MS_RDONLY,
+			},
+			{
+				Device:      "bind",
+				Flags:       syscall.MS_NOSUID | syscall.MS_BIND,
+				Destination: "/app",
+				Source:      filepath.Join(dataPath, "app"),
+			},
+			{
+				Device:      "bind",
+				Flags:       syscall.MS_NOSUID | syscall.MS_NOEXEC | syscall.MS_BIND,
+				Destination: "/dev",
+				Source:      filepath.Join(dataPath, "dev"),
+			},
+			{
+				Device:      "bind",
+				Flags:       syscall.MS_NOSUID | syscall.MS_BIND,
+				Destination: "/tmp",
+				Source:      filepath.Join(dataPath, "tmp"),
+			},
+			{
+				Device:      "bind",
+				Flags:       syscall.MS_NOSUID | syscall.MS_BIND,
+				Destination: "/var/tmp",
+				Source: filepath.Join(
+					dataPath,
+					"var", "tmp",
+				),
+			},
+			{
+				Device:      "bind",
+				Flags:       syscall.MS_NOSUID | syscall.MS_BIND | syscall.MS_RDONLY,
+				Destination: "/etc/passwd",
+				Source: filepath.Join(
+					dataPath, "passwd",
+				),
+			},
+			{
+				Device:      "bind",
+				Flags:       syscall.MS_NOSUID | syscall.MS_BIND | syscall.MS_RDONLY,
+				Destination: "/etc/resolv.conf",
+				Source:      "/etc/resolv.conf",
+			},
 		},
-		RootFs:   filepath.Join(dataPath, "root"),
-		Hostname: containerUUID,
-		User:     fmt.Sprintf("%d:%d", uid, uid),
-		Env:      env,
-		Namespaces: []libcontainer.Namespace{
-			{Type: "NEWIPC"},
-			{Type: "NEWNET"},
-			{Type: "NEWNS"},
-			{Type: "NEWPID"},
-			{Type: "NEWUTS"},
+		MaskPaths: []string{
+			"/proc/kcore",
+			"/proc/latency_stats",
+			"/proc/timer_stats",
+		},
+		ReadonlyPaths: []string{
+			"/proc/asound",
+			"/proc/bus",
+			"/proc/fs",
+			"/proc/irq",
+			"/proc/sys",
+			"/proc/sysrq-trigger",
+		},
+		MountLabel: containerUUID,
+		Devices:    configs.DefaultSimpleDevices,
+		PivotDir:   "/tmp",
+		Rootfs:     filepath.Join(dataPath, "root"),
+		Readonlyfs: true,
+		Hostname:   containerUUID,
+		Namespaces: []configs.Namespace{
+			{Type: configs.NEWPID},
+			{Type: configs.NEWNS},
+			{Type: configs.NEWUTS},
+			{Type: configs.NEWIPC},
+			{Type: configs.NEWNET, Path: netNS},
 		},
 		Capabilities: []string{
 			"CHOWN",
 			"DAC_OVERRIDE",
+			"FSETID",
 			"FOWNER",
 			"MKNOD",
 			"NET_RAW",
@@ -456,19 +539,22 @@ func containerConfig(
 			"NET_BIND_SERVICE",
 			"SYS_CHROOT",
 			"KILL",
+			"AUDIT_WRITE",
 		},
-		Networks: []*libcontainer.Network{
+		Networks: []*configs.Network{
 			{
 				Address: "127.0.0.1/0",
 				Gateway: "localhost",
 				Mtu:     1500,
 				Type:    "loopback",
 			},
-			network,
+			//network,
 		},
-		Cgroups: &cgroups.Cgroup{
+		Cgroups: &configs.Cgroup{
 			Name:           containerUUID,
-			AllowedDevices: devices.DefaultAllowedDevices,
+			AllowedDevices: configs.DefaultAllowedDevices,
 		},
+		// TODO: resource limits (cgroups and rlimits)
+		// TODO: sysctl set somaxconn
 	}
 }

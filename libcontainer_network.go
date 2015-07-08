@@ -6,73 +6,199 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net"
 
-	"github.com/docker/docker/pkg/iptables"
-	"github.com/docker/libcontainer/network"
+	"github.com/docker/libnetwork"
+	"github.com/docker/libnetwork/driverapi"
+	"github.com/docker/libnetwork/iptables"
+	"github.com/docker/libnetwork/netutils"
+	"github.com/docker/libnetwork/types"
+	"github.com/vishvananda/netlink"
 )
+
+const containerIFID = 1
 
 var (
-	ErrInvalidIPMask = errors.New("mask is not a /30")
+	ErrInvalidIPMask   = errors.New("mask is not a /30")
+	ErrInvalidNetwork  = errors.New("Invalid Network")
+	ErrInvalidEndpoint = errors.New("Invalid Endpoint")
 )
 
-// Routed implements libcontainer's network.NetworkStrategy interface,
+// Routed implements libnetwork's Driver interface,
 // offering containers only layer 3 connectivity to the outside world.
 type Routed struct {
-	network.Veth
-	privateSubnet net.IPNet
+	//	network.Veth
+	networks map[string]*routedNetwork
 }
 
-// Create sets up a veth pair, setting the config.Gateway address on the master
-// (host) side. The veth pair forms a small subnet with a single host and
-// gateway.
-func (r *Routed) Create(
-	config *network.Network, nspid int, state *network.NetworkState,
-) error {
-	if config.VethPrefix == "" {
-		return fmt.Errorf("veth prefix is not specified")
-	}
-	if err := r.enablePacketForwarding(); err != nil {
+func RegisterRoutedDriver(controller libnetwork.NetworkController) error {
+	r := &Routed{networks: make(map[string]*routedNetwork)}
+	capability := driverapi.Capability{Scope: driverapi.LocalScope}
+	c := controller.(driverapi.DriverCallback)
+	if err := c.RegisterDriver("routed", r, capability); err != nil {
 		return err
 	}
-	if err := r.natOutboundTraffic(); err != nil {
-		return err
+	return controller.ConfigureNetworkDriver("routed", nil)
+}
+
+type routedNetwork struct {
+	privateSubnet net.IPNet
+	endpoints     map[string]*routedEndpoint
+}
+
+type routedEndpoint struct {
+	address         net.IP
+	gateway         net.IP
+	hostIFName      string
+	containerIFName string
+}
+
+func (r *Routed) Config(options map[string]interface{}) error {
+	return r.enablePacketForwarding()
+}
+
+func (r *Routed) CreateNetwork(nid types.UUID, options map[string]interface{}) error {
+	network := &routedNetwork{
+		privateSubnet: options["subnet"].(net.IPNet),
+		endpoints:     make(map[string]*routedEndpoint),
 	}
-	name1, name2, err := createVethPair(config.VethPrefix, config.TxQueueLen)
-	if err != nil {
-		return err
-	}
-	_, subnet, err := net.ParseCIDR(config.Address)
-	if err != nil {
-		return err
-	}
-	gw := &net.IPNet{
-		IP:   net.ParseIP(config.Gateway),
-		Mask: subnet.Mask,
-	}
-	if err := network.SetInterfaceIp(name1, gw.String()); err != nil {
-		return err
-	}
-	if err := network.SetMtu(name1, config.Mtu); err != nil {
-		return err
-	}
-	if err := network.InterfaceUp(name1); err != nil {
-		return err
-	}
-	if err := network.SetInterfaceInNamespacePid(name2, nspid); err != nil {
-		return err
-	}
-	state.VethHost = name1
-	state.VethChild = name2
+	r.networks[string(nid)] = network
+	return network.natOutboundTraffic()
+}
+
+func (r *Routed) DeleteNetwork(nid types.UUID) error {
+	delete(r.networks, string(nid))
+	// TODO remove NAT rule
 	return nil
 }
 
-func (r *Routed) Initialize(
-	net *network.Network, state *network.NetworkState,
+func (r *Routed) CreateEndpoint(
+	nid, eid types.UUID,
+	epInfo driverapi.EndpointInfo,
+	options map[string]interface{},
 ) error {
-	return r.Veth.Initialize(net, state)
+	var err error
+	epSubnet := options["subnet"].(*SmallSubnet)
+	network, ok := r.networks[string(nid)]
+	if !ok {
+		return ErrInvalidNetwork
+	}
+	name1, name2, err := createVethPair("veth", 0)
+	if err != nil {
+		return err
+	}
+	hostIF, err := netlink.LinkByName(name1)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			netlink.LinkDel(hostIF)
+		}
+	}()
+	containerIF, err := netlink.LinkByName(name2)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			netlink.LinkDel(containerIF)
+		}
+	}()
+	if err := netlink.LinkSetMTU(hostIF, 1500); err != nil {
+		return err
+	}
+	if err := netlink.LinkSetMTU(containerIF, 1500); err != nil {
+		return err
+	}
+
+	if err := netlink.AddrAdd(hostIF, &netlink.Addr{
+		IPNet: epSubnet.Gateway(),
+	}); err != nil {
+		return err
+	}
+
+	if err := netlink.LinkSetUp(hostIF); err != nil {
+		return err
+	}
+	network.endpoints[string(eid)] = &routedEndpoint{
+		address:         epSubnet.Host().IP,
+		gateway:         epSubnet.Gateway().IP,
+		hostIFName:      name1,
+		containerIFName: name2,
+	}
+	emptyIPV6 := net.IPNet{}
+	return epInfo.AddInterface(
+		containerIFID,
+		containerIF.Attrs().HardwareAddr,
+		*epSubnet.Host(),
+		emptyIPV6,
+	)
+}
+
+func (r *Routed) DeleteEndpoint(nid, eid types.UUID) error {
+	network, ok := r.networks[string(nid)]
+	if !ok {
+		return ErrInvalidNetwork
+	}
+	endpoint, ok := network.endpoints[string(eid)]
+	if !ok {
+		return nil // already gone
+	}
+	hostIF, err := netlink.LinkByName(endpoint.hostIFName)
+	if err != nil {
+		return err
+	}
+	if err := netlink.LinkDel(hostIF); err != nil {
+		return err
+	}
+	containerIF, err := netlink.LinkByName(endpoint.containerIFName)
+	if err != nil {
+		return nil // already gone
+	}
+	if err := netlink.LinkDel(containerIF); err != nil {
+		return err
+	}
+	delete(network.endpoints, string(eid))
+	return nil
+}
+
+func (r *Routed) EndpointOperInfo(nid, eid types.UUID) (map[string]interface{}, error) {
+	return make(map[string]interface{}), nil
+}
+
+func (r *Routed) Join(
+	nid, eid types.UUID,
+	sboxKey string,
+	jinfo driverapi.JoinInfo,
+	options map[string]interface{},
+) error {
+	network, ok := r.networks[string(nid)]
+	if !ok {
+		return ErrInvalidNetwork
+	}
+	endpoint, ok := network.endpoints[string(eid)]
+	if !ok {
+		return ErrInvalidEndpoint
+	}
+	for _, n := range jinfo.InterfaceNames() {
+		if n.ID() != containerIFID {
+			continue // find the container interface
+		}
+		if err := n.SetNames(endpoint.containerIFName, "eth"); err != nil {
+			return err
+		}
+	}
+	return jinfo.SetGateway(endpoint.gateway)
+}
+
+func (r *Routed) Leave(nid, eid types.UUID) error {
+	return nil // noop
+}
+
+func (_ *Routed) Type() string {
+	return "routed"
 }
 
 func (r *Routed) enablePacketForwarding() error {
@@ -83,11 +209,10 @@ func (r *Routed) enablePacketForwarding() error {
 	)
 }
 
-func (r *Routed) natOutboundTraffic() error {
-	// TODO the private network needs to be configurable
+func (n *routedNetwork) natOutboundTraffic() error {
 	masquerade := []string{
 		"POSTROUTING", "-t", "nat",
-		"-s", r.privateSubnet.String(),
+		"-s", n.privateSubnet.String(),
 		"-j", "MASQUERADE",
 	}
 	if _, err := iptables.Raw(
@@ -107,25 +232,31 @@ func (r *Routed) natOutboundTraffic() error {
 }
 
 func createVethPair(prefix string, txQueueLen int) (string, string, error) {
-	host := prefix
-	child := prefix + "-child"
-	if err := network.CreateVethPair(host, child, txQueueLen); err != nil {
+	host, err := netutils.GenerateIfaceName(prefix, 7)
+	if err != nil {
 		return "", "", err
 	}
-	return host, child, nil
+	child, err := netutils.GenerateIfaceName(prefix, 7)
+	if err != nil {
+		return "", "", err
+	}
+	veth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{Name: host, TxQLen: txQueueLen},
+		PeerName:  child}
+	return host, child, netlink.LinkAdd(veth)
 }
 
 // smallSubnet encapsulates operations on single host /30 IPv4 networks. They
 // contain only 4 ip addresses, and only one of them is usable for hosts:
 // 1) network address, 2) gateway ip, 3) host ip, and 4) broadcast ip.
-type smallSubnet struct {
+type SmallSubnet struct {
 	subnet    *net.IPNet
 	gateway   *net.IPNet
 	host      *net.IPNet
 	broadcast *net.IPNet
 }
 
-func newSmallSubnet(n *net.IPNet) (*smallSubnet, error) {
+func NewSmallSubnet(n *net.IPNet) (*SmallSubnet, error) {
 	ones, bits := n.Mask.Size()
 	if bits-ones != 2 {
 		return nil, ErrInvalidIPMask
@@ -156,7 +287,7 @@ func newSmallSubnet(n *net.IPNet) (*smallSubnet, error) {
 		return nil, err
 	}
 
-	return &smallSubnet{
+	return &SmallSubnet{
 		subnet: n,
 		gateway: &net.IPNet{
 			IP:   net.IP(gw.Bytes()).To4(),
@@ -174,16 +305,16 @@ func newSmallSubnet(n *net.IPNet) (*smallSubnet, error) {
 }
 
 // Gateway address and mask of the subnet
-func (sn *smallSubnet) Gateway() *net.IPNet {
+func (sn *SmallSubnet) Gateway() *net.IPNet {
 	return sn.gateway
 }
 
 // Host returns the only unassigned (free) IP/mask in the subnet
-func (sn *smallSubnet) Host() *net.IPNet {
+func (sn *SmallSubnet) Host() *net.IPNet {
 	return sn.host
 }
 
 // Broadcast address and mask of the subnet
-func (sn *smallSubnet) Broadcast() *net.IPNet {
+func (sn *SmallSubnet) Broadcast() *net.IPNet {
 	return sn.broadcast
 }

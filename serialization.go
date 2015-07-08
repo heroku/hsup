@@ -160,5 +160,4 @@ func (hs *Startup) Procs() *Processes {
 
 func init() {
 	gob.Register(&AbsPathDynoDriver{})
-	gob.Register(&LibContainerInitDriver{})
 }

@@ -43,6 +43,7 @@ clean:
 	rm -f $(packagename)*.deb
 	rm -f hsup
 	rm -f hsup-linux-amd64
+	rm -rf Godeps/_workspace/pkg
 
 hsup:
 	godep go build -v -o hsup ./cmd/hsup
