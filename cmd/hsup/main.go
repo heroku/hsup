@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/cyberdelia/heroku-go/v3"
+	"github.com/docker/docker/pkg/reexec"
 	"github.com/heroku/hsup"
 	"github.com/heroku/hsup/diag"
 	flag "github.com/ogier/pflag"
@@ -308,6 +309,9 @@ func logplexDefault(p *hsup.Processes) *url.URL {
 }
 
 func main() {
+	if reexec.Init() {
+		return
+	}
 	dumpOnSignal()
 	var err error
 	log.Println("Starting hsup")

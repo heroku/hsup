@@ -13,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"code.google.com/p/go-uuid/uuid"
 
+	"github.com/docker/libnetwork"
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/configs"
 )
@@ -32,6 +34,9 @@ type LibContainerDynoDriver struct {
 	stacksDir     string
 	containersDir string
 	allocator     *Allocator
+
+	controller libnetwork.NetworkController
+	network    libnetwork.Network
 }
 
 // init reads custom configuration from ENV vars:
@@ -64,9 +69,6 @@ func init() {
 			Mask: subnet.Mask,
 		}
 	}
-
-	//TODO: custom libnetwork driver
-	//network.AddStrategy("routed", &Routed{privateSubnet: dynoPrivateSubnet})
 
 	if minUID := strings.TrimSpace(
 		os.Getenv("LIBCONTAINER_DYNO_UID_MIN"),
@@ -106,11 +108,27 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err != nil {
 		return nil, err
 	}
+	controller, err := libnetwork.New()
+	if err != nil {
+		return nil, err
+	}
+	if err := RegisterRoutedDriver(controller); err != nil {
+		return nil, err
+	}
+	dynoSubnetOpt := libnetwork.NetworkOptionGeneric(map[string]interface{}{
+		"subnet": dynoPrivateSubnet,
+	})
+	network, err := controller.NewNetwork("routed", "dynos", dynoSubnetOpt)
+	if err != nil {
+		return nil, err
+	}
 	return &LibContainerDynoDriver{
 		workDir:       workDir,
 		stacksDir:     stacksDir,
 		containersDir: containersDir,
 		allocator:     allocator,
+		controller:    controller,
+		network:       network,
 	}, nil
 }
 
@@ -130,22 +148,16 @@ func (dd *LibContainerDynoDriver) Build(release *Release) error {
 	return nil
 }
 
-func (dd *LibContainerDynoDriver) networkFor(uid int) (*configs.Network, error) {
+func (dd *LibContainerDynoDriver) networkFor(uid int) (*SmallSubnet, error) {
 	sn, err := dd.allocator.privateNetForUID(uid)
 	if err != nil {
 		return nil, err
 	}
-	subnet, err := newSmallSubnet(sn)
+	subnet, err := NewSmallSubnet(sn)
 	if err != nil {
 		return nil, err
 	}
-	return &configs.Network{
-		Address: subnet.Host().String(),
-		Name:    fmt.Sprintf("veth%d", uid),
-		Gateway: subnet.Gateway().IP.String(),
-		Mtu:     1500,
-		Type:    "routed",
-	}, nil
+	return subnet, nil
 }
 
 func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
@@ -167,8 +179,22 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 	ex.IPInfo = func() (string, int) {
-		ip := strings.Split(network.Address, "/")
-		return ip[0], port
+		return network.Host().IP.String(), port
+	}
+
+	addressOpt := map[string]interface{}{
+		"subnet": network,
+	}
+	endpoint, err := dd.network.CreateEndpoint(containerUUID,
+		libnetwork.EndpointOptionGeneric(addressOpt),
+	)
+	if err != nil {
+		return err
+	}
+	if err := endpoint.Join(containerUUID,
+		libnetwork.JoinOptionHostname(containerUUID),
+	); err != nil {
+		return err
 	}
 
 	// Root FS
@@ -302,6 +328,22 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			if err := os.RemoveAll(dataPath); err != nil {
 				log.Printf("datapath remove all error: %#+v", err)
 			}
+			if err := dd.controller.LeaveAll(containerUUID); err != nil {
+				log.Printf("controller.LeaveAll error: %#+v", err)
+			}
+			if err := endpoint.Delete(); err != nil {
+				log.Printf("endpoint.Leave error: %#+v", err)
+			}
+			netGCDone := make(chan struct{}, 1)
+			go func() {
+				dd.controller.GC()
+				netGCDone <- struct{}{}
+			}()
+			// wait at most 10s
+			select {
+			case <-netGCDone:
+			case <-time.After(10 * time.Second):
+			}
 
 			// it's probably safe to ignore errors here. Worst case
 			// scenario, this uid won't be be reused.
@@ -325,7 +367,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		return err
 	}
 	container, err = factory.Create(containerUUID, containerConfig(
-		containerUUID, dataPath,
+		containerUUID, dataPath, endpoint.Info().SandboxKey(),
 	))
 	if err != nil {
 		return err
@@ -373,7 +415,7 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 
 const defaultMountFlags = syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
 
-func containerConfig(containerUUID string, dataPath string) *configs.Config {
+func containerConfig(containerUUID string, dataPath string, netNS string) *configs.Config {
 	return &configs.Config{
 		Mounts: []*configs.Mount{
 			{
@@ -477,11 +519,11 @@ func containerConfig(containerUUID string, dataPath string) *configs.Config {
 		Readonlyfs: true,
 		Hostname:   containerUUID,
 		Namespaces: []configs.Namespace{
-			{Type: configs.NEWIPC},
-			{Type: configs.NEWNET}, // TODO: SandboxKey from libnetwork
-			{Type: configs.NEWNS},
 			{Type: configs.NEWPID},
+			{Type: configs.NEWNS},
 			{Type: configs.NEWUTS},
+			{Type: configs.NEWIPC},
+			{Type: configs.NEWNET, Path: netNS},
 		},
 		Capabilities: []string{
 			"CHOWN",
