@@ -73,9 +73,10 @@ deb: all
 	rm -rf $(buildpath)
 
 ftest: hsup-docker-container
-	docker run --privileged \
+	docker run --privileged --cap-add=ALL \
 	    -v /var/run/docker.sock:/run/docker.sock \
 	    -v /var/lib/hsup/stacks:/var/lib/hsup/stacks \
+	    -v /lib/modules:/lib/modules \
 	    --entrypoint="/sbin/hsup-in-docker" hsup sh -c \
 	    'mkdir -p /var/cache/buildpack/go1.4.1/go/src/github.com/heroku/ && \
 	    ln -s /app /var/cache/buildpack/go1.4.1/go/src/github.com/heroku/hsup && \
