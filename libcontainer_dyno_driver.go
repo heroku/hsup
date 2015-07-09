@@ -24,6 +24,8 @@ import (
 
 var (
 	dynoPrivateSubnet net.IPNet
+	extraIFHost       string
+	extraIFIP         net.IPNet
 	// default to max 8K dynos
 	dynoMinUID int = 3000
 	dynoMaxUID int = 11000
@@ -35,12 +37,29 @@ type LibContainerDynoDriver struct {
 	containersDir string
 	allocator     *Allocator
 
-	controller libnetwork.NetworkController
-	network    libnetwork.Network
+	controller     libnetwork.NetworkController
+	primaryNetwork libnetwork.Network
+	extraNetwork   libnetwork.Network
+}
+
+type InvalidExtraIFErr struct {
+	value string
+}
+
+func (e *InvalidExtraIFErr) String() string {
+	return e.value
+}
+
+func (e *InvalidExtraIFErr) Error() string {
+	return fmt.Sprintf(
+		"Invalid LIBCONTAINER_DYNO_EXTRA_INTERFACE: %q is not in the hostIFName:x.y.w.z/n format",
+		e.value,
+	)
 }
 
 // init reads custom configuration from ENV vars:
 // - LIBCONTAINER_DYNO_SUBNET
+// - LIBCONTAINER_DYNO_EXTRA_INTERFACE
 // - LIBCONTAINER_DYNO_UID_MIN
 // - LIBCONTAINER_DYNO_UID_MAX
 func init() {
@@ -66,6 +85,24 @@ func init() {
 		}
 		dynoPrivateSubnet = net.IPNet{
 			IP:   baseIP.To4(),
+			Mask: subnet.Mask,
+		}
+	}
+
+	if extraIF := strings.TrimSpace(
+		os.Getenv("LIBCONTAINER_DYNO_EXTRA_INTERFACE"),
+	); len(extraIF) > 0 {
+		parts := strings.SplitN(extraIF, ":", 2)
+		if len(parts) != 2 {
+			panic(&InvalidExtraIFErr{extraIF})
+		}
+		ip, subnet, err := net.ParseCIDR(parts[1])
+		if err != nil {
+			panic(&InvalidExtraIFErr{extraIF})
+		}
+		extraIFHost = parts[0]
+		extraIFIP = net.IPNet{
+			IP:   ip.To4(),
 			Mask: subnet.Mask,
 		}
 	}
@@ -112,24 +149,52 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := RegisterRoutedDriver(controller); err != nil {
-		return nil, err
-	}
-	dynoSubnetOpt := libnetwork.NetworkOptionGeneric(map[string]interface{}{
-		"subnet": dynoPrivateSubnet,
-	})
-	network, err := controller.NewNetwork("routed", "dynos", dynoSubnetOpt)
+	primaryNetwork, extraNetwork, err := dynoNetworks(controller)
 	if err != nil {
 		return nil, err
 	}
 	return &LibContainerDynoDriver{
-		workDir:       workDir,
-		stacksDir:     stacksDir,
-		containersDir: containersDir,
-		allocator:     allocator,
-		controller:    controller,
-		network:       network,
+		workDir:        workDir,
+		stacksDir:      stacksDir,
+		containersDir:  containersDir,
+		allocator:      allocator,
+		controller:     controller,
+		primaryNetwork: primaryNetwork,
+		extraNetwork:   extraNetwork,
 	}, nil
+}
+
+func dynoNetworks(
+	controller libnetwork.NetworkController,
+) (primary libnetwork.Network, extra libnetwork.Network, err error) {
+	if err := RegisterRoutedDriver(controller); err != nil {
+		return nil, nil, err
+	}
+	dynoSubnetOpt := libnetwork.NetworkOptionGeneric(map[string]interface{}{
+		"subnet": dynoPrivateSubnet,
+	})
+	if primary, err = controller.NewNetwork(
+		"routed", "dynos", dynoSubnetOpt,
+	); err != nil {
+		return nil, nil, err
+	}
+
+	if len(extraIFHost) == 0 {
+		return primary, nil, nil
+	}
+
+	if err := RegisterMacvlanDriver(controller); err != nil {
+		return nil, nil, err
+	}
+	extraIFOpts := libnetwork.NetworkOptionGeneric(map[string]interface{}{
+		"hostIF": extraIFHost,
+	})
+	if extra, err = controller.NewNetwork(
+		"macvlan", "dynosExtra", extraIFOpts,
+	); err != nil {
+		return nil, nil, err
+	}
+	return primary, extra, nil
 }
 
 func (dd *LibContainerDynoDriver) Build(release *Release) error {
@@ -185,7 +250,7 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	addressOpt := map[string]interface{}{
 		"subnet": network,
 	}
-	endpoint, err := dd.network.CreateEndpoint(containerUUID,
+	endpoint, err := dd.primaryNetwork.CreateEndpoint(containerUUID,
 		libnetwork.EndpointOptionGeneric(addressOpt),
 	)
 	if err != nil {
@@ -195,6 +260,20 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 		libnetwork.JoinOptionHostname(containerUUID),
 	); err != nil {
 		return err
+	}
+	var extraEndpoint libnetwork.Endpoint
+	if dd.extraNetwork != nil {
+		extraAddressOpt := map[string]interface{}{
+			"address": extraIFIP,
+		}
+		if extraEndpoint, err = dd.extraNetwork.CreateEndpoint(containerUUID,
+			libnetwork.EndpointOptionGeneric(extraAddressOpt),
+		); err != nil {
+			return err
+		}
+		if err := extraEndpoint.Join(containerUUID); err != nil {
+			return err
+		}
 	}
 
 	// Root FS
@@ -333,6 +412,11 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			}
 			if err := endpoint.Delete(); err != nil {
 				log.Printf("endpoint.Leave error: %#+v", err)
+			}
+			if extraEndpoint != nil {
+				if err := extraEndpoint.Delete(); err != nil {
+					log.Printf("extraEndpoint.Leave error: %#+v", err)
+				}
 			}
 			netGCDone := make(chan struct{}, 1)
 			go func() {
