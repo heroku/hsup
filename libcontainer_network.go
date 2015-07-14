@@ -19,10 +19,11 @@ import (
 )
 
 const (
-	routedIFID  = 1
-	macvlanIFID = 2
-	MTU         = 1500
-	TxQueueLen  = 0
+	routedIFID       = 1
+	macvlanIFID      = 2
+	simpleBridgeIFID = 2
+	MTU              = 1500
+	TxQueueLen       = 0
 )
 
 var (
@@ -151,22 +152,21 @@ func (r *Routed) DeleteEndpoint(nid, eid types.UUID) error {
 	if !ok {
 		return nil // already gone
 	}
+	defer delete(network.endpoints, string(eid))
+
 	hostIF, err := netlink.LinkByName(endpoint.hostIFName)
 	if err != nil {
-		return err
+		return nil // already gone
 	}
 	if err := netlink.LinkDel(hostIF); err != nil {
 		return err
 	}
+
 	containerIF, err := netlink.LinkByName(endpoint.containerIFName)
 	if err != nil {
 		return nil // already gone
 	}
-	if err := netlink.LinkDel(containerIF); err != nil {
-		return err
-	}
-	delete(network.endpoints, string(eid))
-	return nil
+	return netlink.LinkDel(containerIF)
 }
 
 func (r *Routed) EndpointOperInfo(nid, eid types.UUID) (map[string]interface{}, error) {
@@ -416,6 +416,185 @@ func (d *Macvlan) Leave(nid, eid types.UUID) error {
 
 func (_ *Macvlan) Type() string {
 	return "macvlan"
+}
+
+// SimpleBridge implements libnetwork's Driver interface,
+// creating veth pairs for each container and attaching the host side to to a
+// bridge
+type SimpleBridge struct {
+	networks map[string]*simpleBridgeNetwork
+}
+
+func RegisterSimpleBridgeDriver(controller libnetwork.NetworkController) error {
+	d := &SimpleBridge{networks: make(map[string]*simpleBridgeNetwork)}
+	capability := driverapi.Capability{Scope: driverapi.LocalScope}
+	c := controller.(driverapi.DriverCallback)
+	if err := c.RegisterDriver(d.Type(), d, capability); err != nil {
+		return err
+	}
+	return controller.ConfigureNetworkDriver(d.Type(), nil)
+}
+
+type simpleBridgeNetwork struct {
+	bridgeName string
+	endpoints  map[string]*simpleBridgeEndpoint
+}
+
+type simpleBridgeEndpoint struct {
+	hostIFName      string
+	containerIFName string
+}
+
+func (d *SimpleBridge) Config(options map[string]interface{}) error {
+	return nil // noop
+}
+
+func (d *SimpleBridge) CreateNetwork(nid types.UUID, options map[string]interface{}) error {
+	network := &simpleBridgeNetwork{
+		bridgeName: options["bridge"].(string),
+		endpoints:  make(map[string]*simpleBridgeEndpoint),
+	}
+	d.networks[string(nid)] = network
+	_, err := netlink.LinkByName(network.bridgeName) // check if exists
+	return err
+}
+
+func (d *SimpleBridge) DeleteNetwork(nid types.UUID) error {
+	delete(d.networks, string(nid))
+	return nil
+}
+
+func (d *SimpleBridge) CreateEndpoint(
+	nid, eid types.UUID,
+	epInfo driverapi.EndpointInfo,
+	options map[string]interface{},
+) error {
+	var err error
+	address := options["address"].(net.IPNet)
+	network, ok := d.networks[string(nid)]
+	if !ok {
+		return ErrInvalidNetwork
+	}
+
+	name1, name2, err := createVethPair("veth", TxQueueLen)
+	if err != nil {
+		return err
+	}
+	hostIF, err := netlink.LinkByName(name1)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			netlink.LinkDel(hostIF)
+		}
+	}()
+	containerIF, err := netlink.LinkByName(name2)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			netlink.LinkDel(containerIF)
+		}
+	}()
+	if err := netlink.LinkSetMTU(hostIF, MTU); err != nil {
+		return err
+	}
+	if err := netlink.LinkSetMTU(containerIF, MTU); err != nil {
+		return err
+	}
+
+	bridgeAttrs := netlink.NewLinkAttrs()
+	bridgeAttrs.Name = network.bridgeName
+	bridge := &netlink.Bridge{bridgeAttrs}
+	if err := netlink.LinkSetMaster(hostIF, bridge); err != nil {
+		return err
+	}
+
+	if err := netlink.AddrAdd(containerIF, &netlink.Addr{
+		IPNet: &address,
+	}); err != nil {
+		return err
+	}
+	if err := netlink.LinkSetUp(hostIF); err != nil {
+		return err
+	}
+	network.endpoints[string(eid)] = &simpleBridgeEndpoint{
+		hostIFName:      name1,
+		containerIFName: name2,
+	}
+	emptyIPV6 := net.IPNet{}
+	return epInfo.AddInterface(
+		simpleBridgeIFID,
+		containerIF.Attrs().HardwareAddr,
+		address,
+		emptyIPV6,
+	)
+}
+
+func (d *SimpleBridge) DeleteEndpoint(nid, eid types.UUID) error {
+	network, ok := d.networks[string(nid)]
+	if !ok {
+		return ErrInvalidNetwork
+	}
+	endpoint, ok := network.endpoints[string(eid)]
+	if !ok {
+		return nil // already gone
+	}
+	defer delete(network.endpoints, string(eid))
+
+	hostIF, err := netlink.LinkByName(endpoint.hostIFName)
+	if err != nil {
+		return nil // already gone
+	}
+	if err := netlink.LinkDel(hostIF); err != nil {
+		return err
+	}
+
+	containerIF, err := netlink.LinkByName(endpoint.containerIFName)
+	if err != nil {
+		return nil // already gone
+	}
+	return netlink.LinkDel(containerIF)
+}
+
+func (d *SimpleBridge) EndpointOperInfo(nid, eid types.UUID) (map[string]interface{}, error) {
+	return make(map[string]interface{}), nil
+}
+
+func (d *SimpleBridge) Join(
+	nid, eid types.UUID,
+	sboxKey string,
+	jinfo driverapi.JoinInfo,
+	options map[string]interface{},
+) error {
+	network, ok := d.networks[string(nid)]
+	if !ok {
+		return ErrInvalidNetwork
+	}
+	endpoint, ok := network.endpoints[string(eid)]
+	if !ok {
+		return ErrInvalidEndpoint
+	}
+	for _, n := range jinfo.InterfaceNames() {
+		if n.ID() != simpleBridgeIFID {
+			continue // find the container interface
+		}
+		if err := n.SetNames(endpoint.containerIFName, "eth"); err != nil {
+			return err
+		}
+		return nil
+	}
+	return errors.New("Join: container side of veth pair not found")
+}
+
+func (d *SimpleBridge) Leave(nid, eid types.UUID) error {
+	return nil // noop
+}
+
+func (_ *SimpleBridge) Type() string {
+	return "simple-bridge"
 }
 
 // smallSubnet encapsulates operations on single host /30 IPv4 networks. They

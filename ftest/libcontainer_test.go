@@ -27,20 +27,22 @@ func TestConfigurableLibcontainerDynoSubnet(t *testing.T) {
 	}
 }
 
+// TestExtraInterface expects a bridge called dynos0 to exist, and will try to
+// attach a dyno to it
 func TestExtraInterface(t *testing.T) {
 	onlyWithLibcontainer(t)
 
-	output, err := run(
+	outp, err := run(
 		AppMinimal, "", []string{
-			"LIBCONTAINER_DYNO_EXTRA_INTERFACE=eth0:192.168.201.5/24",
+			"LIBCONTAINER_DYNO_EXTRA_INTERFACE=dynos0:192.168.201.5/24",
 		},
 		`ip -o addr show eth1 | grep -w inet | awk '{print $4}'`,
 	)
-	debug(t, output)
+	debug(t, outp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(output.out.String()) != "192.168.201.5/24" {
+	if strings.TrimSpace(outp.out.String()) != "192.168.201.5/24" {
 		t.Fatal("Expected an extra (eth1) interface with IP assigned to be: 192.168.201.5/24")
 	}
 }

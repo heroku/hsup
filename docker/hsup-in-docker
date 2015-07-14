@@ -82,5 +82,8 @@ do
 done
 popd >/dev/null
 
+# create a bridge for containers to be attached
+brctl addbr dynos0 || true
+
 [[ $1 ]] && exec "$@"
 exec bash --login

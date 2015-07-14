@@ -24,7 +24,7 @@ import (
 
 var (
 	dynoPrivateSubnet net.IPNet
-	extraIFHost       string
+	extraIFBridge     string
 	extraIFIP         net.IPNet
 	// default to max 8K dynos
 	dynoMinUID int = 3000
@@ -100,7 +100,7 @@ func init() {
 		if err != nil {
 			panic(&InvalidExtraIFErr{extraIF})
 		}
-		extraIFHost = parts[0]
+		extraIFBridge = parts[0]
 		extraIFIP = net.IPNet{
 			IP:   ip.To4(),
 			Mask: subnet.Mask,
@@ -179,18 +179,18 @@ func dynoNetworks(
 		return nil, nil, err
 	}
 
-	if len(extraIFHost) == 0 {
+	if len(extraIFBridge) == 0 {
 		return primary, nil, nil
 	}
 
-	if err := RegisterMacvlanDriver(controller); err != nil {
+	if err := RegisterSimpleBridgeDriver(controller); err != nil {
 		return nil, nil, err
 	}
 	extraIFOpts := libnetwork.NetworkOptionGeneric(map[string]interface{}{
-		"hostIF": extraIFHost,
+		"bridge": extraIFBridge,
 	})
 	if extra, err = controller.NewNetwork(
-		"macvlan", "dynosExtra", extraIFOpts,
+		"simple-bridge", "dynosExtra", extraIFOpts,
 	); err != nil {
 		return nil, nil, err
 	}

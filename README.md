@@ -172,9 +172,9 @@ Some drivers accept custom configuration via ENV.
 
 * `LIBCONTAINER_DYNO_SUBNET`: a CIDR block to allocate dyno subnets (of size
   /30) from. It is `172.16.0.0/12` (RFC1918) by default when not set.
-* `LIBCONTAINER_DYNO_EXTRA_INTERFACE`: interface on the host to inject into the
-  dyno (currently as a macvlan subinterface), together with its IP address CIDR
-  in the format: `hostIFName:IP/Mask`. Eg.: `eth1:10.0.0.10/24`.
+* `LIBCONTAINER_DYNO_EXTRA_INTERFACE`: add an extra interface (eth1) into the
+  dyno, connected to a bridge on the host, and set an IP address for it. Format:
+  `bridge:IP/Mask`. Eg.: `dynos0:10.0.0.10/24`.
 * `LIBCONTAINER_DYNO_UID_MIN` and `LIBCONTAINER_DYNO_UID_MAX`: Linux UIDs to use
   for each dyno. It also defines the maximum number of allowed dynos, as each
   dyno gets a unique UID per box. To avoid reusing subnets (IPs), make sure that
