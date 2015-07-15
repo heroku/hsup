@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io/ioutil"
-	"log"
 	"net"
 
 	"github.com/docker/libnetwork"
@@ -151,9 +150,11 @@ func (r *Routed) DeleteEndpoint(nid, eid types.UUID) error {
 	if !ok {
 		return nil // already gone
 	}
+	delete(network.endpoints, string(eid))
+
 	hostIF, err := netlink.LinkByName(endpoint.hostIFName)
 	if err != nil {
-		return err
+		return nil // already gone
 	}
 	if err := netlink.LinkDel(hostIF); err != nil {
 		return err
@@ -162,11 +163,7 @@ func (r *Routed) DeleteEndpoint(nid, eid types.UUID) error {
 	if err != nil {
 		return nil // already gone
 	}
-	if err := netlink.LinkDel(containerIF); err != nil {
-		return err
-	}
-	delete(network.endpoints, string(eid))
-	return nil
+	return netlink.LinkDel(containerIF)
 }
 
 func (r *Routed) EndpointOperInfo(nid, eid types.UUID) (map[string]interface{}, error) {
@@ -321,9 +318,8 @@ func (d *Macvlan) CreateEndpoint(
 			ParentIndex: hostIF.Attrs().Index,
 			TxQLen:      TxQueueLen,
 		},
-		Mode: netlink.MACVLAN_MODE_BRIDGE,
+		Mode: netlink.MACVLAN_MODE_PASSTHRU,
 	}
-	log.Println("macvlan====> ADDING SUBIF")
 	if err := netlink.LinkAdd(subIF); err != nil {
 		return err
 	}
@@ -333,18 +329,15 @@ func (d *Macvlan) CreateEndpoint(
 		}
 	}()
 
-	log.Println("macvlan====> MTU")
 	if err := netlink.LinkSetMTU(subIF, MTU); err != nil {
 		return err
 	}
-	log.Println("macvlan====> IP")
 	if err := netlink.AddrAdd(subIF, &netlink.Addr{
 		IPNet: &address,
 	}); err != nil {
 		return err
 	}
 
-	log.Println("macvlan====> UP")
 	if err := netlink.LinkSetUp(subIF); err != nil {
 		return err
 	}

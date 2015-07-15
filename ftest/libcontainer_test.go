@@ -4,6 +4,7 @@ package ftest
 
 import (
 	"math/rand"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,9 +31,30 @@ func TestConfigurableLibcontainerDynoSubnet(t *testing.T) {
 func TestExtraInterface(t *testing.T) {
 	onlyWithLibcontainer(t)
 
+	if out, err := exec.Command(
+		"sh", "-c", "ip link add dev dummy10 type dummy",
+	).CombinedOutput(); err != nil {
+		t.Log(string(out))
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(
+		"sh", "-c", "ip link set up dev dummy10",
+	).CombinedOutput(); err != nil {
+		t.Log(string(out))
+		t.Fatal(err)
+	}
+	defer func() {
+		if out, err := exec.Command(
+			"sh", "-c", "ip link del dev dummy10",
+		).CombinedOutput(); err != nil {
+			t.Log(string(out))
+			t.Fatal(err)
+		}
+	}()
+
 	output, err := run(
 		AppMinimal, "", []string{
-			"LIBCONTAINER_DYNO_EXTRA_INTERFACE=eth0:192.168.201.5/24",
+			"LIBCONTAINER_DYNO_EXTRA_INTERFACE=dummy10:192.168.201.5/24",
 		},
 		`ip -o addr show eth1 | grep -w inet | awk '{print $4}'`,
 	)
