@@ -67,6 +67,47 @@ func TestExtraInterface(t *testing.T) {
 	}
 }
 
+func TestExtraInterfaceRoutes(t *testing.T) {
+	onlyWithLibcontainer(t)
+
+	if out, err := exec.Command(
+		"sh", "-c", "ip link add dev dummy10 type dummy",
+	).CombinedOutput(); err != nil {
+		t.Log(string(out))
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(
+		"sh", "-c", "ip link set up dev dummy10",
+	).CombinedOutput(); err != nil {
+		t.Log(string(out))
+		t.Fatal(err)
+	}
+	defer func() {
+		if out, err := exec.Command(
+			"sh", "-c", "ip link del dev dummy10",
+		).CombinedOutput(); err != nil {
+			t.Log(string(out))
+			t.Fatal(err)
+		}
+	}()
+
+	output, err := run(
+		AppMinimal, "", []string{
+			"LIBCONTAINER_DYNO_EXTRA_INTERFACE=dummy10:192.168.201.5/24",
+			"LIBCONTAINER_DYNO_EXTRA_ROUTES=1.2.3.0/24:192.168.201.1:eth1,4.3.0.0/16:192.168.201.1:eth1",
+		},
+		`ip -o route | grep eth1 | grep via | awk '{ print $1, $3 }' | sort`,
+	)
+	debug(t, output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "1.2.3.0/24 192.168.201.1\n4.3.0.0/16 192.168.201.1"
+	if got := strings.TrimSpace(output.out.String()); got != want {
+		t.Fatalf("got routes %q, wanted %q", got, want)
+	}
+}
+
 func TestConfigurableUIDRange(t *testing.T) {
 	onlyWithLibcontainer(t)
 

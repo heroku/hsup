@@ -26,6 +26,8 @@ var (
 	dynoPrivateSubnet net.IPNet
 	extraIFHost       string
 	extraIFIP         net.IPNet
+	extraRoutes       []*configs.Route
+
 	// default to max 8K dynos
 	dynoMinUID int = 3000
 	dynoMaxUID int = 11000
@@ -40,6 +42,7 @@ type LibContainerDynoDriver struct {
 	controller     libnetwork.NetworkController
 	primaryNetwork libnetwork.Network
 	extraNetwork   libnetwork.Network
+	extraRoutes    []*configs.Route
 }
 
 type InvalidExtraIFErr struct {
@@ -60,6 +63,7 @@ func (e *InvalidExtraIFErr) Error() string {
 // init reads custom configuration from ENV vars:
 // - LIBCONTAINER_DYNO_SUBNET
 // - LIBCONTAINER_DYNO_EXTRA_INTERFACE
+// - LIBCONTAINER_DYNO_EXTRA_ROUTES
 // - LIBCONTAINER_DYNO_UID_MIN
 // - LIBCONTAINER_DYNO_UID_MAX
 func init() {
@@ -104,6 +108,33 @@ func init() {
 		extraIFIP = net.IPNet{
 			IP:   ip.To4(),
 			Mask: subnet.Mask,
+		}
+	}
+
+	extraRoutes = make([]*configs.Route, 0)
+	if extraRoutesS := strings.TrimSpace(
+		os.Getenv("LIBCONTAINER_DYNO_EXTRA_ROUTES"),
+	); len(extraRoutesS) > 0 {
+		// dest:gateway:ifName,dest:gateway:ifName,...
+		routes := strings.Split(extraRoutesS, ",")
+		for _, r := range routes {
+			destGwIf := strings.Split(r, ":")
+			if len(destGwIf) != 3 {
+				panic("incorrect item count in " + r)
+			}
+			dest, gw, ifName := destGwIf[0], destGwIf[1], destGwIf[2]
+			_, _, err := net.ParseCIDR(dest)
+			if err != nil {
+				panic("invalid destination " + dest)
+			}
+			if net.ParseIP(gw) == nil {
+				panic("invalid gateway " + gw)
+			}
+			extraRoutes = append(extraRoutes, &configs.Route{
+				Destination:   dest,
+				Gateway:       gw,
+				InterfaceName: ifName,
+			})
 		}
 	}
 
@@ -153,6 +184,7 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	return &LibContainerDynoDriver{
 		workDir:        workDir,
 		stacksDir:      stacksDir,
@@ -161,6 +193,7 @@ func NewLibContainerDynoDriver(workDir string) (*LibContainerDynoDriver, error) 
 		controller:     controller,
 		primaryNetwork: primaryNetwork,
 		extraNetwork:   extraNetwork,
+		extraRoutes:    extraRoutes,
 	}, nil
 }
 
@@ -433,9 +466,14 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 			// scenario, this uid won't be be reused.
 			dd.allocator.FreeUID(uid)
 
+			var ec int
+			if code != nil {
+				ec = code.Sys().(syscall.WaitStatus).ExitStatus()
+			}
+
 			// TODO: handle exit status when signaled
 			ex.initExitStatus <- &ExitStatus{
-				Code: code.Sys().(syscall.WaitStatus).ExitStatus(),
+				Code: ec,
 				Err:  err,
 			}
 			close(ex.initExitStatus)
@@ -450,9 +488,14 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err != nil {
 		return err
 	}
-	container, err = factory.Create(containerUUID, containerConfig(
-		containerUUID, dataPath, endpoint.Info().SandboxKey(),
-	))
+	container, err = factory.Create(
+		containerUUID, containerConfig(
+			containerUUID,
+			dataPath,
+			endpoint.Info().SandboxKey(),
+			dd.extraRoutes,
+		),
+	)
 	if err != nil {
 		return err
 	}
@@ -499,7 +542,7 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 
 const defaultMountFlags = syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
 
-func containerConfig(containerUUID string, dataPath string, netNS string) *configs.Config {
+func containerConfig(containerUUID, dataPath, netNS string, routes []*configs.Route) *configs.Config {
 	return &configs.Config{
 		Mounts: []*configs.Mount{
 			{
@@ -634,6 +677,7 @@ func containerConfig(containerUUID string, dataPath string, netNS string) *confi
 			},
 			//network,
 		},
+		Routes: routes,
 		Cgroups: &configs.Cgroup{
 			Name:           containerUUID,
 			AllowedDevices: configs.DefaultAllowedDevices,
