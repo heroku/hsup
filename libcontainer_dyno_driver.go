@@ -183,14 +183,14 @@ func dynoNetworks(
 		return primary, nil, nil
 	}
 
-	if err := RegisterMacvlanDriver(controller); err != nil {
+	if err := RegisterIPVlanDriver(controller); err != nil {
 		return nil, nil, err
 	}
 	extraIFOpts := libnetwork.NetworkOptionGeneric(map[string]interface{}{
 		"hostIF": extraIFHost,
 	})
 	if extra, err = controller.NewNetwork(
-		"macvlan", "dynosExtra", extraIFOpts,
+		"ipvlan", "dynosExtra", extraIFOpts,
 	); err != nil {
 		return nil, nil, err
 	}

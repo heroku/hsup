@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io/ioutil"
-	"log"
 	"net"
 
 	"github.com/docker/libnetwork"
@@ -19,10 +18,10 @@ import (
 )
 
 const (
-	routedIFID  = 1
-	macvlanIFID = 2
-	MTU         = 1500
-	TxQueueLen  = 0
+	routedIFID = 1
+	ipvlanIFID = 2
+	MTU        = 1500
+	TxQueueLen = 0
 )
 
 var (
@@ -252,14 +251,14 @@ func createVethPair(prefix string, txQueueLen int) (string, string, error) {
 	return host, child, netlink.LinkAdd(veth)
 }
 
-// Macvlan implements libnetwork's Driver interface,
-// creating macvlan (type=bridge) subinterfaces for containers
-type Macvlan struct {
-	networks map[string]*macvlanNetwork
+// IPVlan implements libnetwork's Driver interface,
+// creating ipvlan (type=L3) subinterfaces for containers
+type IPVlan struct {
+	networks map[string]*ipvlanNetwork
 }
 
-func RegisterMacvlanDriver(controller libnetwork.NetworkController) error {
-	d := &Macvlan{networks: make(map[string]*macvlanNetwork)}
+func RegisterIPVlanDriver(controller libnetwork.NetworkController) error {
+	d := &IPVlan{networks: make(map[string]*ipvlanNetwork)}
 	capability := driverapi.Capability{Scope: driverapi.LocalScope}
 	c := controller.(driverapi.DriverCallback)
 	if err := c.RegisterDriver(d.Type(), d, capability); err != nil {
@@ -268,35 +267,35 @@ func RegisterMacvlanDriver(controller libnetwork.NetworkController) error {
 	return controller.ConfigureNetworkDriver(d.Type(), nil)
 }
 
-type macvlanNetwork struct {
+type ipvlanNetwork struct {
 	hostIF    string
-	endpoints map[string]*macvlanEndpoint
+	endpoints map[string]*ipvlanEndpoint
 }
 
-type macvlanEndpoint struct {
+type ipvlanEndpoint struct {
 	containerIFName string
 }
 
-func (d *Macvlan) Config(options map[string]interface{}) error {
+func (d *IPVlan) Config(options map[string]interface{}) error {
 	return nil // noop
 }
 
-func (d *Macvlan) CreateNetwork(nid types.UUID, options map[string]interface{}) error {
-	network := &macvlanNetwork{
+func (d *IPVlan) CreateNetwork(nid types.UUID, options map[string]interface{}) error {
+	network := &ipvlanNetwork{
 		hostIF:    options["hostIF"].(string),
-		endpoints: make(map[string]*macvlanEndpoint),
+		endpoints: make(map[string]*ipvlanEndpoint),
 	}
 	d.networks[string(nid)] = network
 	_, err := netlink.LinkByName(network.hostIF) // check if exists
 	return err
 }
 
-func (d *Macvlan) DeleteNetwork(nid types.UUID) error {
+func (d *IPVlan) DeleteNetwork(nid types.UUID) error {
 	delete(d.networks, string(nid))
 	return nil
 }
 
-func (d *Macvlan) CreateEndpoint(
+func (d *IPVlan) CreateEndpoint(
 	nid, eid types.UUID,
 	epInfo driverapi.EndpointInfo,
 	options map[string]interface{},
@@ -307,7 +306,7 @@ func (d *Macvlan) CreateEndpoint(
 	if !ok {
 		return ErrInvalidNetwork
 	}
-	subIFName, err := netutils.GenerateIfaceName("mac", 7)
+	subIFName, err := netutils.GenerateIfaceName("ipvl", 7)
 	if err != nil {
 		return err
 	}
@@ -315,15 +314,14 @@ func (d *Macvlan) CreateEndpoint(
 	if err != nil {
 		return err
 	}
-	subIF := &netlink.Macvlan{
+	subIF := &netlink.IPVlan{
 		LinkAttrs: netlink.LinkAttrs{
 			Name:        subIFName,
 			ParentIndex: hostIF.Attrs().Index,
 			TxQLen:      TxQueueLen,
 		},
-		Mode: netlink.MACVLAN_MODE_BRIDGE,
+		Mode: netlink.IPVLAN_MODE_L3,
 	}
-	log.Println("macvlan====> ADDING SUBIF")
 	if err := netlink.LinkAdd(subIF); err != nil {
 		return err
 	}
@@ -332,35 +330,30 @@ func (d *Macvlan) CreateEndpoint(
 			netlink.LinkDel(subIF)
 		}
 	}()
-
-	log.Println("macvlan====> MTU")
 	if err := netlink.LinkSetMTU(subIF, MTU); err != nil {
 		return err
 	}
-	log.Println("macvlan====> IP")
 	if err := netlink.AddrAdd(subIF, &netlink.Addr{
 		IPNet: &address,
 	}); err != nil {
 		return err
 	}
-
-	log.Println("macvlan====> UP")
 	if err := netlink.LinkSetUp(subIF); err != nil {
 		return err
 	}
-	network.endpoints[string(eid)] = &macvlanEndpoint{
+	network.endpoints[string(eid)] = &ipvlanEndpoint{
 		containerIFName: subIFName,
 	}
 	emptyIPV6 := net.IPNet{}
 	return epInfo.AddInterface(
-		macvlanIFID,
+		ipvlanIFID,
 		subIF.Attrs().HardwareAddr,
 		address,
 		emptyIPV6,
 	)
 }
 
-func (d *Macvlan) DeleteEndpoint(nid, eid types.UUID) error {
+func (d *IPVlan) DeleteEndpoint(nid, eid types.UUID) error {
 	network, ok := d.networks[string(nid)]
 	if !ok {
 		return ErrInvalidNetwork
@@ -380,11 +373,11 @@ func (d *Macvlan) DeleteEndpoint(nid, eid types.UUID) error {
 	return nil
 }
 
-func (d *Macvlan) EndpointOperInfo(nid, eid types.UUID) (map[string]interface{}, error) {
+func (d *IPVlan) EndpointOperInfo(nid, eid types.UUID) (map[string]interface{}, error) {
 	return make(map[string]interface{}), nil
 }
 
-func (d *Macvlan) Join(
+func (d *IPVlan) Join(
 	nid, eid types.UUID,
 	sboxKey string,
 	jinfo driverapi.JoinInfo,
@@ -399,7 +392,7 @@ func (d *Macvlan) Join(
 		return ErrInvalidEndpoint
 	}
 	for _, n := range jinfo.InterfaceNames() {
-		if n.ID() != macvlanIFID {
+		if n.ID() != ipvlanIFID {
 			continue // find the container interface
 		}
 		if err := n.SetNames(endpoint.containerIFName, "eth"); err != nil {
@@ -407,15 +400,15 @@ func (d *Macvlan) Join(
 		}
 		return nil
 	}
-	return errors.New("Join: macvlan interface not found")
+	return errors.New("Join: ipvlan interface not found")
 }
 
-func (d *Macvlan) Leave(nid, eid types.UUID) error {
+func (d *IPVlan) Leave(nid, eid types.UUID) error {
 	return nil // noop
 }
 
-func (_ *Macvlan) Type() string {
-	return "macvlan"
+func (_ *IPVlan) Type() string {
+	return "ipvlan"
 }
 
 // smallSubnet encapsulates operations on single host /30 IPv4 networks. They
