@@ -22,6 +22,12 @@ import (
 	"github.com/opencontainers/runc/libcontainer/configs"
 )
 
+const (
+	// magic value to specify as `destination` in LIBCONTAINER_DYNO_EXTRA_ROUTES
+	// to be replaced with what ends up being the dyno's default gateway
+	gatewayReplacedWithDynoDefault = "default"
+)
+
 var (
 	dynoPrivateSubnet net.IPNet
 	extraIFHost       string
@@ -116,6 +122,8 @@ func init() {
 		os.Getenv("LIBCONTAINER_DYNO_EXTRA_ROUTES"),
 	); len(extraRoutesS) > 0 {
 		// dest:gateway:ifName,dest:gateway:ifName,...
+		// gateway can be the value of gatewayReplacedWithDynoDefault (eg "default")
+		// to be replaced with the dyno's generated default gateway IP
 		routes := strings.Split(extraRoutesS, ",")
 		for _, r := range routes {
 			destGwIf := strings.Split(r, ":")
@@ -127,7 +135,7 @@ func init() {
 			if err != nil {
 				panic("invalid destination " + dest)
 			}
-			if net.ParseIP(gw) == nil {
+			if net.ParseIP(gw) == nil && gw != gatewayReplacedWithDynoDefault {
 				panic("invalid gateway " + gw)
 			}
 			extraRoutes = append(extraRoutes, &configs.Route{
@@ -488,12 +496,18 @@ func (dd *LibContainerDynoDriver) Start(ex *Executor) error {
 	if err != nil {
 		return err
 	}
+
+	extraRoutes, err := dd.replaceDefaultInExtraRoutes(containerUUID, dd.extraRoutes)
+	if err != nil {
+		return err
+	}
+
 	container, err = factory.Create(
 		containerUUID, containerConfig(
 			containerUUID,
 			dataPath,
 			endpoint.Info().SandboxKey(),
-			dd.extraRoutes,
+			extraRoutes,
 		),
 	)
 	if err != nil {
@@ -538,6 +552,27 @@ func createPasswdWithDynoUser(stackImagePath, dataPath string, uid int) error {
 
 	_, err = contents.WriteTo(dst)
 	return err
+}
+
+func (dd *LibContainerDynoDriver) replaceDefaultInExtraRoutes(containerUUID string, routes []*configs.Route) ([]*configs.Route, error) {
+	endpoint, err := dd.primaryNetwork.EndpointByName(containerUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*configs.Route, 0, len(routes))
+	for _, r := range routes {
+		if r.Gateway == gatewayReplacedWithDynoDefault {
+			n := &configs.Route{
+				Destination:   r.Destination,
+				Gateway:       endpoint.Info().Gateway().String(),
+				InterfaceName: r.InterfaceName,
+			}
+			r = n
+		}
+		out = append(out, r)
+	}
+	return out, nil
 }
 
 const defaultMountFlags = syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV

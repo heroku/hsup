@@ -73,15 +73,15 @@ func TestExtraInterfaceRoutes(t *testing.T) {
 	output, err := run(
 		AppMinimal, "", []string{
 			"LIBCONTAINER_DYNO_EXTRA_INTERFACE=dummy10:192.168.201.5/24",
-			"LIBCONTAINER_DYNO_EXTRA_ROUTES=1.2.3.0/24:192.168.201.1:eth1,4.3.0.0/16:192.168.201.1:eth1",
+			"LIBCONTAINER_DYNO_EXTRA_ROUTES=1.2.3.0/24:192.168.201.1:eth1,4.3.0.0/16:192.168.201.1:eth1,7.7.7.0/24:default:eth0",
 		},
-		`ip -o route | grep eth1 | grep via | awk '{ print $1, $3 }' | sort`,
+		`default=$(ip -o route | grep default | awk '{ print $3 }'); ip -o route | grep "7.7.7.0/24 via $default" | awk '{ print $1 }'; ip -o route | grep eth1 | grep via | awk '{ print $1, $3 }' | sort`,
 	)
 	debug(t, output)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "1.2.3.0/24 192.168.201.1\n4.3.0.0/16 192.168.201.1"
+	want := "7.7.7.0/24\n1.2.3.0/24 192.168.201.1\n4.3.0.0/16 192.168.201.1"
 	if got := strings.TrimSpace(output.out.String()); got != want {
 		t.Fatalf("got routes %q, wanted %q", got, want)
 	}
