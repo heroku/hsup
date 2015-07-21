@@ -3,18 +3,23 @@ package hsup
 import (
 	"io"
 	"net/url"
-
-	"io/ioutil"
+	"sync"
 
 	shuttle "github.com/heroku/log-shuttle"
 )
 
 type relay struct {
-	cl   *shuttle.Shuttle
-	name string
+	cl     *shuttle.Shuttle
+	name   string
+	out    io.ReadCloser
+	err    io.ReadCloser
+	readWG sync.WaitGroup
 }
 
-func newRelay(logplex *url.URL, name string) (*relay, error) {
+func newRelay(
+	logplex *url.URL, name string,
+	out, err io.ReadCloser,
+) (*relay, error) {
 	cfg := shuttle.NewConfig()
 	cfg.LogsURL = logplex.String()
 	cfg.Appname = "app"
@@ -24,19 +29,35 @@ func newRelay(logplex *url.URL, name string) (*relay, error) {
 	cl := shuttle.NewShuttle(cfg)
 	cl.Launch()
 
-	return &relay{cl: cl, name: name}, nil
+	return &relay{cl: cl, name: name, out: out, err: err}, nil
 }
 
-func (rl *relay) run(in io.Reader) {
-	rl.cl.ReadLogLines(ioutil.NopCloser(in))
+func (rl *relay) run() {
+	rl.readWG.Add(2)
+	go func() {
+		defer rl.readWG.Done()
+		rl.cl.ReadLogLines(rl.out)
+	}()
+	go func() {
+		defer rl.readWG.Done()
+		rl.cl.ReadLogLines(rl.err)
+	}()
 }
 
 func (rl *relay) stop() {
+	rl.out.Close()
+	rl.err.Close()
+	rl.readWG.Wait()
 	rl.cl.Land()
 }
 
-func teePipe(dst io.Writer) (io.Reader, io.Writer) {
+type teeReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
+func teePipe(dst io.Writer) (io.ReadCloser, io.WriteCloser) {
 	r, w := io.Pipe()
 	tr := io.TeeReader(r, dst)
-	return tr, w
+	return &teeReadCloser{Reader: tr, Closer: r}, w
 }
