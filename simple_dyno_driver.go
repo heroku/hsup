@@ -28,18 +28,15 @@ func (dd *SimpleDynoDriver) Start(ex *Executor) (err error) {
 
 	// Tee stdout and stderr to Logplex.
 	if ex.LogplexURL != nil {
-		var rStdout, rStderr io.Reader
-		var err error
-		ex.logsRelay, err = newRelay(ex.LogplexURL, ex.Name())
-		if err != nil {
-			return err
-		}
-
+		var rStdout, rStderr io.ReadCloser
 		rStdout, ex.cmd.Stdout = teePipe(os.Stdout)
 		rStderr, ex.cmd.Stderr = teePipe(os.Stderr)
-
-		go ex.logsRelay.run(rStdout)
-		go ex.logsRelay.run(rStderr)
+		if ex.logsRelay, err = newRelay(
+			ex.LogplexURL, ex.Name(), rStdout, rStderr,
+		); err != nil {
+			return err
+		}
+		ex.logsRelay.run()
 	}
 
 	// Fill environment vector from Heroku configuration.
