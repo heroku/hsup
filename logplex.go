@@ -28,6 +28,10 @@ func newRelay(logplex *url.URL, name string) (*relay, error) {
 }
 
 func (rl *relay) run(in io.Reader) {
+	defer func() {
+		//ignore panics that occur when calling go run(...) races with ex.Wait() returning when processes die fast.
+		recover()
+	}()
 	rl.cl.ReadLogLines(ioutil.NopCloser(in))
 }
 
