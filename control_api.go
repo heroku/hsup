@@ -13,6 +13,7 @@ import (
 
 type ProcessStatus struct {
 	Status    string
+	ProcessID int
 	IPAddress string
 	Port      int
 }
@@ -129,6 +130,7 @@ func (c *ControlAPI) handleStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Processes[e.ProcessType] = ProcessStatus{
 			IPAddress: address,
 			Port:      port,
+			ProcessID: e.ProcessID,
 			Status:    e.State.String(),
 		}
 	}
