@@ -1,4 +1,6 @@
-# hsup
+# hsup [DEPRECATED]
+
+_This project is officially retired and no longer maintained._
 
 Supervises processes that are configured in a Heroku-esque way.
 
