@@ -8,6 +8,8 @@ import (
 	"github.com/heroku/hsup"
 )
 
+var slug = "change me, path to slug"
+
 func TestMain(m *testing.M) {
 	if binary == "" {
 		fmt.Fprintln(os.Stderr, "no hsup binary specified, skipping functional tests")
@@ -21,7 +23,7 @@ var (
 	AppMinimal = hsup.AppSerializable{
 		Version:   1,
 		Name:      "test-app-123",
-		Slug:      "https://s3.amazonaws.com/sclasen-herokuslugs/slug.tgz",
+		Slug:      slug,
 		Stack:     "cedar-14",
 		Processes: make([]hsup.FormationSerializable, 0),
 	}
@@ -33,7 +35,7 @@ var (
 			"TESTENTRY": "vAlId",
 			"PORT":      "5000",
 		},
-		Slug:      "https://s3.amazonaws.com/sclasen-herokuslugs/slug.tgz",
+		Slug:      slug,
 		Stack:     "cedar-14",
 		Processes: make([]hsup.FormationSerializable, 0),
 	}
