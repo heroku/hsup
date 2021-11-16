@@ -25,7 +25,7 @@ import (
 
 const (
 	// currently available versions of Heroku stack images
-	HerokuStacksManifestURL = "https://s3.amazonaws.com/heroku_stacks_production/manifest.yml"
+	HerokuStacksManifestURL = "manifest.yml"
 )
 
 // HerokuStackImage models stack images as they are distributed by Heroku:

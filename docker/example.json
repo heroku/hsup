@@ -5,7 +5,7 @@
         "FOO": "production",
         "PORT": "12345"
     },
-    "Slug": "https://s3.amazonaws.com/sclasen-herokuslugs/slug.tgz",
+    "Slug": "path to slug.tgz",
     "Stack": "cedar-14",
     "Processes": [
         {
